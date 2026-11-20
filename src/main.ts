@@ -1,6 +1,6 @@
 import { getErrorCode, Platform } from "./host";
 import { ScannerClient } from "./workers/client";
-import { exportName, prepareExport, type ExportFormat } from "./export";
+import { createScanExports, exportName, type ExportFormat } from "./export";
 import { validateImageInput } from "./image/input";
 import { fullFrame, isConvex } from "./workers/geometry";
 import type { Corners, Point, ScanMode } from "./workers/protocol";
@@ -13,7 +13,7 @@ function element<Type extends HTMLElement>(id: string): Type {
 }
 
 const platform = new Platform();
-const initializeButton = element<HTMLButtonElement>("initialize");
+const retryButton = element<HTMLButtonElement>("retry-engine");
 const processButton = element<HTMLButtonElement>("process");
 const saveButton = element<HTMLButtonElement>("save");
 const shareButton = element<HTMLButtonElement>("share");
@@ -30,9 +30,15 @@ const resetCropButton = element<HTMLButtonElement>("reset-crop");
 const cropStage = element<HTMLDivElement>("crop-stage");
 const cropOutline = element<HTMLCanvasElement>("crop-outline");
 const handles = Array.from(cropStage.querySelectorAll<HTMLButtonElement>(".corner"));
+const workspace = element("workspace");
+const outputPlaceholder = element("output-placeholder");
+const outputSize = element("output-size");
 const outputCanvas = element<HTMLCanvasElement>("output");
 
 let client: ScannerClient | null = null;
+let startingClient: ScannerClient | null = null;
+let engineState: "loading" | "ready" | "failed" = "loading";
+let disposed = false;
 let selectedFile: File | null = null;
 let exportBlob: Blob | null = null;
 let exportGeneration = 0;
@@ -40,12 +46,12 @@ let busy = false;
 let corners: Corners | undefined;
 let turns = 0;
 let previewReady = false;
-let resultReady = false;
+let scanExports: ReturnType<typeof createScanExports> | null = null;
 
 function invalidateResult() {
   exportGeneration++;
   exportBlob = null;
-  resultReady = false;
+  scanExports = null;
 }
 
 function drawCrop() {
@@ -62,7 +68,7 @@ function drawCrop() {
     else context.lineTo(x * width, y * height);
   });
   context.closePath();
-  context.strokeStyle = "#1769d2";
+  context.strokeStyle = "#14614e";
   context.lineWidth = 3;
   context.stroke();
 }
@@ -78,7 +84,8 @@ function moveCorner(index: number, point: Point) {
   invalidateResult();
   drawCrop();
   updateButtons();
-  status.textContent = "裁切已调整，点击生成扫描件应用";
+  status.dataset.error = "false";
+  status.textContent = "裁切已调整。点击「更新扫描件」应用。";
 }
 
 handles.forEach((handle, index) => {
@@ -113,8 +120,13 @@ function setStatus(message: string, error = false) {
 }
 
 function updateButtons() {
-  const format = formatSelect.value as ExportFormat;
-  initializeButton.disabled = busy || !!client;
+  retryButton.hidden = engineState !== "failed";
+  workspace.hidden = !previewReady;
+  outputCanvas.hidden = !scanExports;
+  outputPlaceholder.hidden = !!scanExports;
+  outputSize.textContent = scanExports ? `${outputCanvas.width} × ${outputCanvas.height}` : "";
+  shareButton.hidden = !platform.canShare;
+  processButton.textContent = busy ? "正在处理…" : previewReady ? "更新扫描件" : "生成扫描件";
   fileInput.disabled = busy;
   formatSelect.disabled = busy;
   modeSelect.disabled = busy;
@@ -123,53 +135,64 @@ function updateButtons() {
   processButton.disabled = busy || !client || !selectedFile;
   saveButton.disabled = busy || !exportBlob;
   shareButton.disabled = busy || !exportBlob || !platform.canShare;
-  saveButton.textContent = exportBlob
-    ? `保存 ${exportName(format)}（${(exportBlob.size / 1024).toFixed(0)} KiB）`
-    : "保存已准备文件";
 }
 
 async function updateExport() {
   const generation = ++exportGeneration;
   exportBlob = null;
   updateButtons();
-  if (!resultReady || !outputCanvas.width || !outputCanvas.height) return;
+  if (!scanExports) return;
   const format = formatSelect.value as ExportFormat;
   try {
     const started = performance.now();
-    const blob = await prepareExport(outputCanvas, format);
+    const { file, reused } = scanExports(format);
+    const blob = await file;
     if (generation !== exportGeneration) return;
     exportBlob = blob;
-    log(`${format.toUpperCase()} 准备完成：${blob.size} bytes，${(performance.now() - started).toFixed(1)}ms`);
+    log(reused
+      ? `${format.toUpperCase()} 复用导出文件：${blob.size} bytes`
+      : `${format.toUpperCase()} 准备完成：${blob.size} bytes，${(performance.now() - started).toFixed(1)}ms`);
   } catch (error) {
+    if (generation !== exportGeneration) return;
     setStatus(`导出准备失败：${error instanceof Error ? error.message : String(error)}`, true);
   } finally {
     updateButtons();
   }
 }
 
-initializeButton.addEventListener("click", async () => {
-  if (client || busy) return;
-  busy = true;
+async function loadEngine() {
+  engineState = "loading";
+  setStatus("正在准备扫描功能…");
   updateButtons();
-  setStatus(platform.sdk ? "正在创建 SDK Worker 并读取包内 WASM…" : "正在创建本地 Worker 并读取 WASM…");
-  let worker: Worker | null = null;
   try {
-    [worker] = await Promise.all([platform.createWorker()]);
     const wasm = await platform.readWasm();
-    client = await ScannerClient.create(() => Promise.resolve(worker!));
-    const initialized = await client.initialize(wasm);
-    setStatus(`OpenCV 初始化完成：${initialized.initMs.toFixed(1)}ms`);
+    if (disposed) return;
+    const candidate = await ScannerClient.create(() => platform.createWorker());
+    if (disposed) {
+      candidate.terminate();
+      return;
+    }
+    startingClient = candidate;
+    const initialized = await candidate.initialize(wasm);
+    if (disposed) return;
+    client = candidate;
+    engineState = "ready";
+    log(`OpenCV 初始化完成：${initialized.initMs.toFixed(1)}ms`);
     log(initialized.buildInformation.slice(0, 5000));
+    setStatus(selectedFile ? "点击「生成扫描件」开始处理。" : "");
   } catch (error) {
-    worker?.terminate();
-    client?.terminate();
-    client = null;
-    setStatus(`初始化失败：${error instanceof Error ? error.message : String(error)}`, true);
+    startingClient?.terminate();
+    if (disposed) return;
+    engineState = "failed";
+    log(`引擎加载失败：${error instanceof Error ? error.message : String(error)}`);
+    setStatus("扫描功能加载失败，请重试。", true);
   } finally {
-    busy = false;
-    updateButtons();
+    startingClient = null;
+    if (!disposed) updateButtons();
   }
-});
+}
+
+retryButton.addEventListener("click", () => void loadEngine());
 
 fileInput.addEventListener("change", () => {
   selectedFile = fileInput.files?.[0] ?? null;
@@ -181,7 +204,8 @@ fileInput.addEventListener("change", () => {
   drawCrop();
   fileInfo.textContent = selectedFile
     ? `${selectedFile.name} · ${(selectedFile.size / 1024 / 1024).toFixed(2)} MiB`
-    : "尚未选择图片";
+    : "JPEG、PNG 或 WebP";
+  if (engineState === "ready") setStatus(selectedFile ? "点击「生成扫描件」开始处理。" : "");
   updateButtons();
 });
 
@@ -208,6 +232,7 @@ async function scan() {
     inputCanvas.getContext("2d")!.drawImage(bitmap, 0, 0, inputCanvas.width, inputCanvas.height);
     previewReady = true;
     drawCrop();
+    updateButtons();
     const original = document.createElement("canvas");
     original.width = width;
     original.height = height;
@@ -217,7 +242,8 @@ async function scan() {
     bitmap = null;
     const image = context.getImageData(0, 0, width, height);
     original.width = original.height = 1;
-    setStatus(`Worker 正在处理 ${width}×${height}…`);
+    log(`Worker 正在处理 ${width}×${height}`);
+    setStatus("正在生成扫描件…");
     const automatic = !corners;
     const result = await client.process({
       width, height, rgba: image.data.buffer, corners, turns, mode: modeSelect.value as ScanMode,
@@ -233,14 +259,15 @@ async function scan() {
       0,
       0,
     );
-    setStatus(`处理完成：${result.processMs.toFixed(1)}ms；正在准备导出文件…`);
-    resultReady = true;
+    log(`处理完成：${result.processMs.toFixed(1)}ms`);
+    setStatus("正在准备导出文件…");
+    scanExports = createScanExports(outputCanvas);
     await updateExport();
     if (exportBlob) {
       const boundary = automatic && !result.corners
         ? "；未找到完整纸边，已保留整张照片，可手动调整四角"
         : "；请核对裁切范围";
-      setStatus(`文件已准备 · ${result.width}×${result.height}${boundary}`);
+      setStatus(`文件已准备${boundary}`);
     }
   } catch (error) {
     setStatus(`处理失败：${error instanceof Error ? error.message : String(error)}`, true);
@@ -292,20 +319,33 @@ shareButton.addEventListener("click", () => {
     });
 });
 
-shareButton.hidden = !platform.canShare;
-updateButtons();
-platform.connect((theme) => {
-  document.documentElement.dataset.mode = theme.mode;
-  document.documentElement.dataset.motion = theme.reducedMotion ? "reduced" : "full";
-}).then(async () => {
-  setStatus(platform.sdk ? "MApp 已连接；请初始化引擎" : "本地预览；保存使用浏览器下载");
-  await platform.ready();
-}).catch(async (error) => {
-  setStatus(`平台连接失败：${error instanceof Error ? error.message : String(error)}`, true);
-  await platform.ready();
-});
+async function start() {
+  updateButtons();
+  try {
+    await platform.connect((theme) => {
+      document.documentElement.dataset.mode = theme.mode;
+      document.documentElement.dataset.motion = theme.reducedMotion ? "reduced" : "full";
+    });
+  } catch (error) {
+    log(`平台连接失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (disposed) {
+    platform.dispose();
+    return;
+  }
+  try {
+    await platform.ready();
+  } catch (error) {
+    log(`平台就绪通知失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!disposed) await loadEngine();
+}
+void start();
 
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) return;
+  disposed = true;
+  startingClient?.terminate();
   client?.terminate();
   platform.dispose();
 });

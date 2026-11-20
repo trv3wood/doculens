@@ -12,20 +12,41 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number)
   });
 }
 
-export async function prepareExport(canvas: HTMLCanvasElement, format: ExportFormat) {
-  if (format !== "pdf") {
-    return canvasToBlob(canvas, `image/${format}`, format === "jpeg" ? 0.9 : undefined);
+export function createScanExports(canvas: HTMLCanvasElement) {
+  const { width, height } = canvas;
+  const files = new Map<ExportFormat, Promise<Blob>>();
+
+  function getFile(format: ExportFormat): Promise<Blob> {
+    const existing = files.get(format);
+    if (existing) return existing;
+    // PDF 与 PNG 导出共用同一次 PNG 编码，包括尚未完成的任务。
+    const pending = format === "pdf"
+      ? embedPdf(getFile("png"), width, height)
+      : canvasToBlob(canvas, `image/${format}`, format === "jpeg" ? 0.9 : undefined);
+    const file = pending.catch((error) => {
+      files.delete(format);
+      throw error;
+    });
+    files.set(format, file);
+    return file;
   }
 
-  // PDF 不拉伸到 A4：长边固定 842pt，短边按图像比例计算，不重采样。
-  const png = await canvasToBlob(canvas, "image/png");
+  return (format: ExportFormat) => ({
+    reused: files.has(format),
+    file: getFile(format),
+  });
+}
+
+async function embedPdf(pngFile: Promise<Blob>, width: number, height: number) {
+  // PDF 长边固定 842pt，短边按图像比例计算。
+  const png = await pngFile;
   const pdf = await PDFDocument.create();
   const image = await pdf.embedPng(await png.arrayBuffer());
-  const scale = 842 / Math.max(canvas.width, canvas.height);
-  const width = canvas.width * scale;
-  const height = canvas.height * scale;
-  const page = pdf.addPage([width, height]);
-  page.drawImage(image, { x: 0, y: 0, width, height });
+  const scale = 842 / Math.max(width, height);
+  const pageWidth = width * scale;
+  const pageHeight = height * scale;
+  const page = pdf.addPage([pageWidth, pageHeight]);
+  page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
   const bytes = await pdf.save();
   return new Blob([bytes as BlobPart], { type: "application/pdf" });
 }

@@ -19,5 +19,5 @@ DOCULENS_BUILD_JOBS=3 bash engine/build.sh
 `public/wasm/opencv.wasm`、`public/licenses/opencv.txt` 和 `BUILD_INFO.json`。
 
 使用的是 `bin/opencv_js.js` 原始 modularized factory，而不是会自动执行
-`cv(Module)` 的 UMD 包装。Worker 代码可在收到初始化消息后再调用 factory。
+`cv(Module)` 的 UMD 包装。应用在 MApp 首屏就绪后异步读取包内 WASM 并启动 Worker。Worker 收到初始化消息后才调用 factory，处理任务在引擎就绪后提交。
 `finalize.py` 会拒绝包含 `new Function`、`eval` 或 `importScripts` 的产物。

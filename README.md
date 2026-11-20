@@ -13,15 +13,21 @@ DocuLens 是一款面向 Linux.do MApp 的轻量级文档扫描工具。无需�
 - **单页导出**：支持 JPEG、PNG 和单页 PDF 保存，系统分享为增强能力。
 - **隐私优先**：所有图像处理均在浏览器本地完成，不上传原始图片。
 
+## 使用方法
+
+1. 打开 DocuLens 后可立即选照片，扫描引擎会在后台加载。加载失败时，点击「重试加载」即可继续，已选照片会保留。
+2. 点击「生成扫描件」。可在原图上拖动四角、旋转或重新找纸边，手动修角后点击「更新扫描件」。
+3. 确认扫描结果，选择 JPEG、PNG 或单页 PDF 后保存。MApp 授权分享时会显示「分享」。
+
 ## 技术栈
 
 | 模块 | 技术 |
 |---|---|
-| 前端 | TypeScript、Preact、Vite |
+| 前端 | TypeScript、Vite |
 | 图像处理 | OpenCV.js / WebAssembly |
 | WASM 构建 | Emscripten、SIMD |
 | 后台计算 | Web Worker |
-| 图像显示 | Canvas / OffscreenCanvas |
+| 图像显示 | Canvas 2D |
 | PDF 导出 | pdf-lib |
 | 平台集成 | Linux.do MApp SDK |
 
@@ -29,7 +35,7 @@ DocuLens 是一款面向 Linux.do MApp 的轻量级文档扫描工具。无需�
 
 ## 开发与状态
 
-M0 已在 MApp 真机验证文件导入、classic Worker、OpenCV WASM 和文件保存。1.0.3 加入扫描编辑和图像增强，已通过 Chromium 回归，MApp 真机复验待完成。
+[1.0.3](https://github.com/trv3wood/doculens/releases/tag/v1.0.3) 已由用户在 MApp 真机试用。当前开发版更新了启动流程与扫描界面，真机复验针对这次改动。
 
 效果评价使用带参考真值的 PSNR、SSIM，不做 OCR/CER。真机验收环境为 iPhone 15 Pro Max / iOS 27.2 的 MApp；独立移动浏览器只用于开发诊断。
 

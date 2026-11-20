@@ -3,11 +3,9 @@ import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
 
-async function initializeAndProcess(page: import("@playwright/test").Page, fixture: string) {
+async function selectAndProcess(page: import("@playwright/test").Page, fixture: string) {
   await page.goto("/");
   await page.setInputFiles("#file", fixture);
-  await page.click("#initialize");
-  await expect(page.locator("#status")).toContainText("OpenCV 初始化完成", { timeout: 120_000 });
   await page.click("#process");
   await expect(page.locator("#status")).toContainText("文件已准备", { timeout: 120_000 });
 }
@@ -34,7 +32,7 @@ test("小图 Worker/WASM 处理、三种导出与网络边界", async ({ page, b
     }
   });
 
-  await initializeAndProcess(page, resolve("testdata/generated/document-640x480.png"));
+  await selectAndProcess(page, resolve("testdata/generated/document-640x480.png"));
   await expect(page.locator("#status")).toContainText("已保留整张照片");
   const dimensions = await page.locator("#output").evaluate((canvas: HTMLCanvasElement) => [
     canvas.width,
@@ -63,7 +61,7 @@ test("小图 Worker/WASM 处理、三种导出与网络边界", async ({ page, b
 });
 
 test("12MP 图片全分辨率 Worker 处理", async ({ page }) => {
-  await initializeAndProcess(page, resolve("testdata/generated/document-4000x3000.png"));
+  await selectAndProcess(page, resolve("testdata/generated/document-4000x3000.png"));
   const dimensions = await page.locator("#output").evaluate((canvas: HTMLCanvasElement) => [
     canvas.width,
     canvas.height,
@@ -103,8 +101,6 @@ test("斜拍纸张自动扶正、四角调整及旋转导出", async ({ page }) 
     mimeType: "image/png",
     buffer: Buffer.from(image, "base64"),
   });
-  await page.click("#initialize");
-  await expect(page.locator("#status")).toContainText("OpenCV 初始化完成");
   await page.click("#process");
   await expect(page.locator("#status")).toContainText("请核对裁切范围");
   const scan = page.locator("#output");
@@ -150,4 +146,100 @@ test("斜拍纸张自动扶正、四角调整及旋转导出", async ({ page }) 
   await page.click("#reset-crop");
   await expect(page.locator("#save")).toBeEnabled();
   expect(await size()).toEqual([520, 640]);
+});
+
+
+test("窄屏启动时后台加载，选图可先完成，加载失败后可重试", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  let finishFirstLoad!: () => void;
+  const firstLoad = new Promise<void>((resolve) => { finishFirstLoad = resolve; });
+  let requests = 0;
+  await page.route("**/wasm/opencv.wasm", async (route) => {
+    if (++requests === 1) {
+      await firstLoad;
+      await route.fulfill({ status: 503 });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect.poll(() => requests).toBe(1);
+  await expect(page.locator("#retry-engine")).toBeHidden();
+  await expect(page.locator("#workspace")).toBeHidden();
+  await expect(page.locator("#file")).toBeEnabled();
+  await page.setInputFiles("#file", resolve("testdata/generated/document-640x480.png"));
+  await expect(page.locator("#file-info")).toContainText("document-640x480");
+  await expect(page.locator("#process")).toBeDisabled();
+  finishFirstLoad();
+  await expect(page.locator("#status")).toContainText("扫描功能加载失败");
+  await page.getByRole("button", { name: "重试加载" }).click();
+  await expect(page.locator("#retry-engine")).toBeHidden();
+  await expect(page.locator("#process")).toBeEnabled();
+  await page.click("#process");
+  await expect(page.locator("#save")).toBeEnabled();
+  expect(requests).toBe(2);
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(pageWidth).toBe(360);
+});
+
+test("MApp 首屏就绪后自动加载包内资源", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    Object.defineProperty(window, "startupCalls", { value: calls });
+    Object.defineProperty(window, "miniApp", { value: {
+      ready: Promise.resolve(),
+      permissions: { has: (name: string) => name === "workers.create" },
+      lifecycle: { ready: () => { calls.push("ready"); } },
+      assets: { async readBytes(path: string) {
+        calls.push(path);
+        const response = await fetch(`/${path}`);
+        return new Uint8Array(await response.arrayBuffer());
+      } },
+      workers: { create(path: string) {
+        calls.push(path);
+        return new Worker(`/${path}`);
+      } },
+    } });
+  });
+  await page.goto("/");
+  await page.setInputFiles("#file", resolve("testdata/generated/document-640x480.png"));
+  await expect(page.locator("#process")).toBeEnabled();
+  const calls = await page.evaluate(() => Reflect.get(window, "startupCalls"));
+  expect(calls).toEqual(["ready", "wasm/opencv.wasm", "workers/scanner.js"]);
+});
+
+test("切换格式复用编码任务，旋转后按新结果导出", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    const encode = HTMLCanvasElement.prototype.toBlob;
+    Object.defineProperty(window, "encodedFormats", { value: calls });
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+      calls.push(type!);
+      if (type === "image/png" && !Reflect.has(window, "finishFirstPng")) {
+        Object.defineProperty(window, "finishFirstPng", {
+          value: () => encode.call(this, callback, type, quality),
+        });
+      } else {
+        encode.call(this, callback, type, quality);
+      }
+    };
+  });
+  await selectAndProcess(page, resolve("testdata/generated/document-640x480.png"));
+  const encodedFormats = () => page.evaluate(() => Reflect.get(window, "encodedFormats"));
+  await page.selectOption("#format", "pdf");
+  await expect.poll(encodedFormats).toEqual(["image/jpeg", "image/png"]);
+  await page.selectOption("#format", "png");
+  await page.selectOption("#format", "pdf");
+  await expect(page.locator("#save")).toBeDisabled();
+  await page.evaluate(() => Reflect.get(window, "finishFirstPng")());
+  const firstPdf = await downloadExport(page, "pdf");
+  await downloadExport(page, "png");
+  expect(await downloadExport(page, "pdf")).toEqual(firstPdf);
+  expect(await encodedFormats()).toEqual(["image/jpeg", "image/png"]);
+
+  await page.click("#rotate");
+  const rotated = await PDFDocument.load(await downloadExport(page, "pdf"));
+  const { width, height } = rotated.getPage(0).getSize();
+  expect(width / height).toBeCloseTo(480 / 640, 8);
+  expect(await encodedFormats()).toEqual(["image/jpeg", "image/png", "image/png"]);
 });
