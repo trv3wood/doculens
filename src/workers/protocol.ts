@@ -1,3 +1,11 @@
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type Corners = [Point, Point, Point, Point];
+export type ScanMode = "gray" | "enhanced" | "binary";
+
 export interface InitRequest {
   id: number;
   type: "init";
@@ -10,6 +18,9 @@ export interface ProcessRequest {
   width: number;
   height: number;
   rgba: ArrayBuffer;
+  corners?: Corners;
+  turns: number;
+  mode: ScanMode;
 }
 
 export type ScannerRequest = InitRequest | ProcessRequest;
@@ -28,6 +39,7 @@ export interface ProcessedResponse {
   height: number;
   rgba: ArrayBuffer;
   processMs: number;
+  corners?: Corners;
 }
 
 export interface ErrorResponse {

@@ -1,4 +1,4 @@
-import type { ScannerRequest, ScannerResponse } from "./protocol";
+import type { ProcessRequest, ScannerRequest, ScannerResponse } from "./protocol";
 
 export class ScannerClient {
   private nextId = 1;
@@ -38,10 +38,10 @@ export class ScannerClient {
     return response;
   }
 
-  async process(width: number, height: number, rgba: ArrayBuffer) {
+  async process(input: Omit<ProcessRequest, "id" | "type">) {
     const response = await this.request(
-      { id: this.nextId++, type: "process", width, height, rgba },
-      [rgba],
+      { id: this.nextId++, type: "process", ...input },
+      [input.rgba],
     );
     if (response.type !== "processed") throw new Error("图像处理响应无效");
     return response;

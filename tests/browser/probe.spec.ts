@@ -23,18 +23,19 @@ async function downloadExport(page: import("@playwright/test").Page, format: str
   return readFile(path);
 }
 
-test("小图 Worker/WASM 处理、三种导出与网络边界", async ({ page }) => {
+test("小图 Worker/WASM 处理、三种导出与网络边界", async ({ page, baseURL }) => {
   const pageErrors: string[] = [];
   const externalRequests: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
     const url = request.url();
-    if (!url.startsWith("http://127.0.0.1:5191") && !url.startsWith("blob:") && !url.startsWith("data:")) {
+    if (!url.startsWith(`${baseURL}/`) && !url.startsWith("blob:") && !url.startsWith("data:")) {
       externalRequests.push(url);
     }
   });
 
   await initializeAndProcess(page, resolve("testdata/generated/document-640x480.png"));
+  await expect(page.locator("#status")).toContainText("已保留整张照片");
   const dimensions = await page.locator("#output").evaluate((canvas: HTMLCanvasElement) => [
     canvas.width,
     canvas.height,
@@ -70,4 +71,83 @@ test("12MP 图片全分辨率 Worker 处理", async ({ page }) => {
   expect(dimensions).toEqual([4000, 3000]);
   const jpeg = await downloadExport(page, "jpeg");
   expect(jpeg.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+});
+
+test("斜拍纸张自动扶正、四角调整及旋转导出", async ({ page }) => {
+  await page.goto("/");
+  const image = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 520;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#30363b";
+    ctx.fillRect(0, 0, 640, 520);
+    ctx.beginPath();
+    ctx.moveTo(125, 70);
+    ctx.lineTo(560, 112);
+    ctx.lineTo(530, 460);
+    ctx.lineTo(72, 420);
+    ctx.closePath();
+    ctx.clip();
+    const light = ctx.createLinearGradient(70, 0, 560, 0);
+    light.addColorStop(0, "#a4a4a4");
+    light.addColorStop(1, "#ececec");
+    ctx.fillStyle = light;
+    ctx.fillRect(0, 0, 640, 520);
+    ctx.fillStyle = "#202020";
+    ctx.fillRect(225, 215, 230, 6);
+    return canvas.toDataURL().split(",")[1];
+  });
+  await page.setInputFiles("#file", {
+    name: "tilted.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(image, "base64"),
+  });
+  await page.click("#initialize");
+  await expect(page.locator("#status")).toContainText("OpenCV 初始化完成");
+  await page.click("#process");
+  await expect(page.locator("#status")).toContainText("请核对裁切范围");
+  const scan = page.locator("#output");
+  const size = () => scan.evaluate((canvas: HTMLCanvasElement) => [canvas.width, canvas.height]);
+  const [width, height] = await size();
+  expect(width).toBeGreaterThan(440);
+  expect(width).toBeLessThan(475);
+  expect(height).toBeGreaterThan(340);
+  expect(height).toBeLessThan(370);
+
+  const paper = await scan.evaluate((canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext("2d")!;
+    return [12, canvas.width - 13].map(x => ctx.getImageData(x, 100, 1, 1).data[0]);
+  });
+  expect(Math.min(...paper)).toBeGreaterThan(200);
+  expect(Math.abs(paper[0] - paper[1])).toBeLessThan(25);
+
+  const corner = page.getByRole("button", { name: "左下角", exact: true });
+  await corner.press("Shift+ArrowRight");
+  await expect(page.locator("#save")).toBeDisabled();
+  await page.selectOption("#format", "pdf");
+  await expect(page.locator("#save")).toBeDisabled();
+  await page.click("#process");
+  await expect(page.locator("#save")).toBeEnabled();
+  const [adjustedWidth, adjustedHeight] = await size();
+  expect(adjustedWidth).toBeLessThan(width);
+  await page.click("#rotate");
+  await expect(page.locator("#save")).toBeEnabled();
+  expect(await size()).toEqual([adjustedHeight, adjustedWidth]);
+  const pdf = await PDFDocument.load(await downloadExport(page, "pdf"));
+  const pageSize = pdf.getPage(0).getSize();
+  expect(pageSize.width / pageSize.height).toBeCloseTo(adjustedHeight / adjustedWidth, 8);
+  await page.selectOption("#mode", "binary");
+  await expect(page.locator("#save")).toBeEnabled();
+  const binary = await scan.evaluate((canvas: HTMLCanvasElement) => {
+    const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+    const values = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) values.add(data[i]);
+    return [...values].sort((a, b) => a - b);
+  });
+  expect(binary).toEqual([0, 255]);
+
+  await page.click("#reset-crop");
+  await expect(page.locator("#save")).toBeEnabled();
+  expect(await size()).toEqual([520, 640]);
 });

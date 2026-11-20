@@ -9,6 +9,16 @@ function getSDKSafe() {
   }
 }
 
+export function getErrorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown })?.code;
+  if (typeof code === "string" && code) return code;
+  if (error instanceof Error) {
+    const match = error.message.match(/[A-Z][A-Z_]{3,}/);
+    return match?.[0] ?? null;
+  }
+  return null;
+}
+
 function exactBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }

@@ -86,3 +86,31 @@ select { padding: 7px; border: 1px solid var(--border); border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+.scan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.crop-stage { position: relative; margin-inline: auto; }
+.crop-stage canvas { height: auto; max-height: none; border: 0; }
+#crop-outline { position: absolute; inset: 0; background: transparent; pointer-events: none; }
+.corner {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  touch-action: none;
+  cursor: grab;
+}
+.corner::after {
+  content: "";
+  display: block;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #1769d2;
+  box-shadow: 0 0 0 1px #1769d2;
+}
