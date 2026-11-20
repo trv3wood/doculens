@@ -12,5 +12,14 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node", "bun", "vite/client"]
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "vite.config.ts",
+    "vite.worker.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ],
+  "exclude": ["src/workers/scanner.ts"]
 }

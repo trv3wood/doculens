@@ -4,17 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --bun vite",
-    "build": "bun run typecheck && bun --bun vite build && bun run scripts/package.ts",
+    "dev": "bun run build:worker && bun --bun vite",
+    "build": "bun run typecheck && bun run validate && bun run build:worker && bun --bun vite build && bun run scripts/package.ts && bun run verify",
     "build:debug": "MINI_APP_DEBUG=1 bun run build",
-    "typecheck": "tsc -p tsconfig.json",
+    "build:worker": "bun --bun vite build --config vite.worker.config.ts && bun run scripts/assemble-worker.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/workers/tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "conformance": "node scripts/conformance.mjs",
     "validate": "node scripts/validate.mjs .",
     "verify": "node scripts/check_zip.mjs dist/package/app.zip",
     "pack": "node scripts/pack.mjs manifest.json dist/web dist/package"
   },
   "dependencies": {
     "@discourse-mini-app/sdk": "file:./vendor/sdk",
-    "@techstark/opencv-js": "5.0.0-release.1",
     "pdf-lib": "1.17.1",
     "preact": "11.2.0"
   },

@@ -1,9 +1,42 @@
 <div id="app">
-<div class="card">
-  <img id="avatar" class="avatar" alt="" hidden />
-  <h1 id="title">DocuLens</h1>
-  <p class="status" id="status">连接中…</p>
-  <p class="user" id="user">—</p>
-  <p class="notice" id="notice" role="status"></p>
-</div>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">M0 宿主能力探针</p>
+      <h1>DocuLens</h1>
+      <p class="subtitle">文件 → classic Worker → OpenCV WASM → 本地保存</p>
+    </header>
+
+    <section class="panel controls" aria-label="探针控制">
+      <button id="initialize" type="button">1. 初始化引擎</button>
+      <label class="file-label" for="file">2. 选择 JPEG / PNG / WebP</label>
+      <input id="file" type="file" accept="image/jpeg,image/png,image/webp" />
+      <p id="file-info" class="muted">尚未选择图片</p>
+      <button id="process" type="button" disabled>3. 执行全分辨率灰度处理</button>
+    </section>
+
+    <section class="panel previews" aria-label="处理结果">
+      <figure>
+        <figcaption>解码输入（页面缩放显示）</figcaption>
+        <canvas id="input" width="1" height="1"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Worker 输出</figcaption>
+        <canvas id="output" width="1" height="1"></canvas>
+      </figure>
+    </section>
+
+    <section class="panel export" aria-label="导出">
+      <label for="format">导出格式</label>
+      <select id="format">
+        <option value="jpeg">JPEG</option>
+        <option value="png">PNG</option>
+        <option value="pdf">单页 PDF</option>
+      </select>
+      <button id="save" type="button" disabled>保存已准备文件</button>
+      <button id="share" type="button" disabled>系统分享</button>
+    </section>
+
+    <p id="status" class="status" role="status">正在连接平台…</p>
+    <pre id="log" class="log" aria-live="polite"></pre>
+  </main>
 </div>

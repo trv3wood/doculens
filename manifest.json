@@ -7,10 +7,20 @@
   "script": "app.js",
   "style": "app.css",
   "permissions": [
-    "user.read",
     "theme.read",
-    "storage.read",
-    "storage.write"
+    "workers.create",
+    "files.save",
+    "sharing.share"
   ],
+  "assets": [
+    "workers/scanner.js",
+    "wasm/opencv.wasm",
+    "licenses/opencv.txt",
+    "licenses/pdf-lib.txt",
+    "licenses/preact.txt"
+  ],
+  "code": {
+    "workers": ["workers/scanner.js"]
+  },
   "media": {}
 }

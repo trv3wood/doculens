@@ -1,4 +1,12 @@
 node_modules/
 dist/
+.cache/
+engine/build/
+public/.worker-build/
+public/workers/scanner.js
+testdata/real/
+testdata/generated/
+test-results/
+playwright-report/
 *.log
 .DS_Store
