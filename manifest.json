@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "id": "01a1f801-1869-7a35-a7a2-b72ae4d4d7f8",
+  "name": "DocuLens",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "script": "app.js",
+  "style": "app.css",
+  "permissions": [
+    "user.read",
+    "theme.read",
+    "storage.read",
+    "storage.write"
+  ],
+  "media": {}
+}
