@@ -6,6 +6,7 @@ import type {
   ScannerResponse,
 } from "./protocol";
 
+import { recoverOccluded } from "./occlusion";
 import { fullFrame, isConvex, orderCorners } from "./geometry";
 
 interface CvMat {
@@ -182,14 +183,25 @@ function detectCorners(cv: CvModule, source: CvMat, rgba: ArrayBuffer): Corners 
     }
     const colorResult = detectAtScale(cv, chroma, 600, 12, color);
     if (colorResult !== undefined) return colorResult ?? undefined;
+    // A printed box inside a page can also be a strong small rectangle.
+    // Consider small or faint candidates only after all full-size passes fail.
+    for (const [limit, low] of [[600, 10], [360, 5]]) {
+      const small = detectAtScale(cv, source, limit, low, color, 0.05);
+      if (small !== undefined) return small ?? undefined;
+    }
+    const preview = new cv.Mat();
+    const luminance = new cv.Mat();
+    try {
+      cv.resize(chroma, preview, previewSize(cv, chroma, 320), 0, 0, cv.INTER_AREA);
+      cv.GaussianBlur(preview, preview, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+      cv.resize(source, luminance, new cv.Size(preview.cols, preview.rows), 0, 0, cv.INTER_AREA);
+      return recoverOccluded(preview.data, luminance.data, preview.cols, preview.rows);
+    } finally {
+      preview.delete();
+      luminance.delete();
+    }
   } finally {
     chroma.delete();
-  }
-  // A printed box inside a page can also be a strong small rectangle.
-  // Consider small or faint candidates only after all full-size passes fail.
-  for (const [limit, low] of [[600, 10], [360, 5]]) {
-    const small = detectAtScale(cv, source, limit, low, color, 0.05);
-    if (small !== undefined) return small ?? undefined;
   }
 }
 
