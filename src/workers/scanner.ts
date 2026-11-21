@@ -180,13 +180,20 @@ function detectCorners(cv: CvModule, source: CvMat, rgba: ArrayBuffer): Corners 
         data[y * cols + x] = Math.max(0, Math.min(255, 128 + color.rgba[i] - color.rgba[i + 2]));
       }
     }
-    return detectAtScale(cv, chroma, 600, 12, color) ?? undefined;
+    const colorResult = detectAtScale(cv, chroma, 600, 12, color);
+    if (colorResult !== undefined) return colorResult ?? undefined;
   } finally {
     chroma.delete();
   }
+  // A printed box inside a page can also be a strong small rectangle.
+  // Consider small or faint candidates only after all full-size passes fail.
+  for (const [limit, low] of [[600, 10], [360, 5]]) {
+    const small = detectAtScale(cv, source, limit, low, color, 0.05);
+    if (small !== undefined) return small ?? undefined;
+  }
 }
 
-function detectAtScale(cv: CvModule, source: CvMat, limit: number, low: number, color?: ColorImage): Corners | null | undefined {
+function detectAtScale(cv: CvModule, source: CvMat, limit: number, low: number, color?: ColorImage, minimumArea = 0.08): Corners | null | undefined {
   const gray = new cv.Mat();
   const edge = new cv.Mat();
   const closed = new cv.Mat();
@@ -210,7 +217,7 @@ function detectAtScale(cv: CvModule, source: CvMat, limit: number, low: number, 
       const contour = contourList.get(i);
       try {
         const area = cv.contourArea(contour) / (cols * rows);
-        if (area < 0.08) continue;
+        if (area < minimumArea) continue;
         if (diagnostics) diagnostics.largeContours++;
         cv.approxPolyDP(contour, polygon, 0.02 * cv.arcLength(contour, true), true);
         if (polygon.rows !== 4) continue;
