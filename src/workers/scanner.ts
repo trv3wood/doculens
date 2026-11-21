@@ -88,7 +88,20 @@ function previewSize(module: CvModule, source: CvMat, limit: number) {
   );
 }
 
-function borderScore(points: Corners, gray: CvMat, edge: CvMat) {
+interface DetectionDiagnostics {
+  largeContours: number;
+  quadrilaterals: number;
+  weakEdge: number;
+  weakContrast: number;
+}
+
+interface ColorImage {
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
+function borderScore(points: Corners, gray: CvMat, edge: CvMat, diagnostics?: DetectionDiagnostics, color?: ColorImage) {
   const { cols, rows, data } = gray;
   const edgeData = edge.data;
   const scores = points.map((a, i) => {
@@ -101,11 +114,21 @@ function borderScore(points: Corners, gray: CvMat, edge: CvMat) {
     const sample = (x: number, y: number) => Math.round(y) * cols + Math.round(x);
     let contrast = 0;
     let supported = 0;
+    let colorSupport = 0;
     for (let k = 1; k <= 12; k++) {
       const x = a.x * (cols - 1) + dx * k / 13;
       const y = a.y * (rows - 1) + dy * k / 13;
       if (x < 8 || y < 8 || x >= cols - 8 || y >= rows - 8) continue;
       contrast += data[sample(x + 7 * nx, y + 7 * ny)] - data[sample(x - 7 * nx, y - 7 * ny)];
+      if (color) {
+        const offset = (px: number, py: number) => 4 * (
+          Math.round(py * (color.height - 1) / (rows - 1)) * color.width
+          + Math.round(px * (color.width - 1) / (cols - 1)));
+        const inside = offset(x + 7 * nx, y + 7 * ny);
+        const outside = offset(x - 7 * nx, y - 7 * ny);
+        const delta = (channel: number) => color.rgba[inside + channel] - color.rgba[outside + channel];
+        if (Math.max(delta(0), delta(1), delta(2)) - Math.min(delta(0), delta(1), delta(2)) >= 24) colorSupport++;
+      }
       for (let offset = -4; offset <= 4; offset++) {
         if (edgeData[sample(x + offset * nx, y + offset * ny)]) {
           supported++;
@@ -114,19 +137,56 @@ function borderScore(points: Corners, gray: CvMat, edge: CvMat) {
       }
     }
     return {
-      support: supported,
+      support: supported, colorSupport,
       contrast: contrast / 12,
     };
   });
   // 纸边需要四侧都有边缘证据，且纸面与背景的明暗方向基本一致。
-  if (scores.some(({ support }) => support < 7)) return 0;
+  if (scores.some(({ support }) => support < 7)) {
+    if (diagnostics) diagnostics.weakEdge++;
+    return 0;
+  }
   const light = scores.filter(({ contrast }) => contrast >= 8).length;
   const dark = scores.filter(({ contrast }) => contrast <= -8).length;
-  if (Math.max(light, dark) < 3) return 0;
+  if (Math.max(light, dark) < 3 && !scores.every(side => side.colorSupport >= 8)) {
+    if (diagnostics) diagnostics.weakContrast++;
+    return 0;
+  }
   return scores.reduce((sum, { support, contrast }) => sum + support / 12 + Math.min(60, Math.abs(contrast)) / 60, 0);
 }
 
-function detectCorners(cv: CvModule, source: CvMat): Corners | undefined {
+function detectCorners(cv: CvModule, source: CvMat, rgba: ArrayBuffer): Corners | undefined {
+  // A smaller preview suppresses fine print and closes short gaps along faint borders.
+  for (const [limit, low] of [[1000, 35], [600, 12], [360, 8]]) {
+    const result = detectAtScale(cv, source, limit, low);
+    if (result === null) return; // Competing crops require manual review.
+    if (result) return result;
+  }
+  const color = { rgba: new Uint8ClampedArray(rgba), width: source.cols, height: source.rows };
+  const result = detectAtScale(cv, source, 600, 12, color);
+  if (result !== undefined) return result ?? undefined;
+
+  // Red-blue chroma can retain a closed boundary when foreground and background
+  // have similar luminance. A constant offset maps signed differences to bytes.
+  const chroma = new cv.Mat();
+  try {
+    cv.resize(source, chroma, previewSize(cv, source, 600), 0, 0, cv.INTER_AREA);
+    const { cols, rows, data } = chroma;
+    for (let y = 0; y < rows; y++) {
+      const sy = Math.floor((y + 0.5) * source.rows / rows);
+      for (let x = 0; x < cols; x++) {
+        const sx = Math.floor((x + 0.5) * source.cols / cols);
+        const i = 4 * (sy * source.cols + sx);
+        data[y * cols + x] = Math.max(0, Math.min(255, 128 + color.rgba[i] - color.rgba[i + 2]));
+      }
+    }
+    return detectAtScale(cv, chroma, 600, 12, color) ?? undefined;
+  } finally {
+    chroma.delete();
+  }
+}
+
+function detectAtScale(cv: CvModule, source: CvMat, limit: number, low: number, color?: ColorImage): Corners | null | undefined {
   const gray = new cv.Mat();
   const edge = new cv.Mat();
   const closed = new cv.Mat();
@@ -135,11 +195,14 @@ function detectCorners(cv: CvModule, source: CvMat): Corners | undefined {
   const polygon = new cv.Mat();
   const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
   try {
-    cv.resize(source, gray, previewSize(cv, source, 1000), 0, 0, cv.INTER_AREA);
+    const diagnostics = (scope as typeof scope & { debugDetection?: boolean }).debugDetection
+      ? { largeContours: 0, quadrilaterals: 0, weakEdge: 0, weakContrast: 0 }
+      : undefined;
+    cv.resize(source, gray, previewSize(cv, source, limit), 0, 0, cv.INTER_AREA);
     const { cols, rows } = gray;
     if (Math.min(cols, rows) < 32) return;
     cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-    cv.Canny(gray, edge, 35, 105, 3, false);
+    cv.Canny(gray, edge, low, 3 * low, 3, false);
     cv.morphologyEx(edge, closed, cv.MORPH_CLOSE, kernel);
     cv.findContours(closed, contourList, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
     const candidates: { corners: Corners; score: number }[] = [];
@@ -148,6 +211,7 @@ function detectCorners(cv: CvModule, source: CvMat): Corners | undefined {
       try {
         const area = cv.contourArea(contour) / (cols * rows);
         if (area < 0.08) continue;
+        if (diagnostics) diagnostics.largeContours++;
         cv.approxPolyDP(contour, polygon, 0.02 * cv.arcLength(contour, true), true);
         if (polygon.rows !== 4) continue;
         const coordinates = polygon.data32S;
@@ -156,7 +220,8 @@ function detectCorners(cv: CvModule, source: CvMat): Corners | undefined {
           y: coordinates[index + 1] / (rows - 1),
         })) as Corners);
         if (!isConvex(corners)) continue;
-        const score = borderScore(corners, gray, edge) * area;
+        if (diagnostics) diagnostics.quadrilaterals++;
+        const score = borderScore(corners, gray, edge, diagnostics, color) * area;
         if (score > 0) candidates.push({ corners, score });
       } finally {
         contour.delete();
@@ -164,12 +229,13 @@ function detectCorners(cv: CvModule, source: CvMat): Corners | undefined {
     }
     candidates.sort((a, b) => b.score - a.score);
     const best = candidates[0];
-    if (!best) return;
+
     // 忽略同一纸边的内外两条轮廓，分数接近的不同裁切范围交给用户。
-    const ambiguous = candidates.slice(1).some(({ corners, score }) =>
+    const ambiguous = !!best && candidates.slice(1).some(({ corners, score }) =>
       score >= best.score * 0.9 && corners.some((point, i) =>
         Math.hypot(point.x - best.corners[i].x, point.y - best.corners[i].y) > 0.04));
-    if (!ambiguous) return best.corners;
+    if (diagnostics) console.debug("detect-pass", JSON.stringify({ limit, ...diagnostics, candidates: candidates.length, ambiguous }));
+    return ambiguous ? null : best?.corners;
   } finally {
     for (const mat of [gray, edge, closed, hierarchy, contourList, polygon, kernel]) mat.delete();
   }
@@ -237,7 +303,7 @@ async function process(request: ProcessRequest) {
       source.delete();
     }
     const detectStarted = performance.now();
-    const corners = request.corners ?? detectCorners(cv, gray);
+    const corners = request.corners ?? detectCorners(cv, gray, request.rgba);
     const detectMs = request.corners ? undefined : performance.now() - detectStarted;
     const transform = request.turns ||
       (corners && corners.some(({ x, y }, i) => x !== fullFrame[i].x || y !== fullFrame[i].y));

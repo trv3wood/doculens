@@ -61,6 +61,16 @@ let browser;
 try {
   browser = await chromium.launch({ executablePath: process.env.M0_CHROME });
   const page = await browser.newPage();
+  const diagnostics = [];
+  if (process.env.M1_DIAGNOSTICS === "1") {
+    await page.route("**/worker", async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: "self.debugDetection=true;\n" + await response.text() });
+    });
+    page.on("console", message => {
+      if (message.text().startsWith("detect-")) diagnostics.push(message.text());
+    });
+  }
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const report = await page.evaluate(async (annotations) => {
     const worker = new Worker("/worker");
@@ -101,6 +111,7 @@ try {
       const ctx = canvas(width, height);
       ctx.drawImage(image, 0, 0);
       image.close();
+      console.debug("detect-frame", name);
       const result = await scan(ctx);
       const corners = result.corners?.map(({ x, y }) => [x * (width - 1), y * (height - 1)]);
       const diagonal = Math.hypot(width, height);
@@ -121,7 +132,7 @@ try {
       preview.fillRect(0, 0, 240, 270);
       const scale = Math.min(240 / result.width, 270 / result.height);
       preview.drawImage(corrected.canvas, 0, 0, result.width * scale, result.height * scale);
-      frames.push({ name, expected, corners: corners ?? null, normalizedCornerError: error ?? null,
+      frames.push({ name, expected, corners: corners ?? null, normalizedCornerError: error ?? null, detectMs: result.detectMs,
         overlay: overlay.canvas.toDataURL("image/jpeg", .85),
         preview: preview.canvas.toDataURL("image/jpeg", .85) });
     }
@@ -209,6 +220,7 @@ try {
     return { frames, synthetic };
   }, Object.entries(truth));
 
+  if (diagnostics.length) await writeFile(join(output, "diagnostics.log"), diagnostics.join("\n"));
   const cards = [];
   for (const [i, frame] of report.frames.entries()) {
     frame.iou = quadIoU(frame.expected, frame.corners);
