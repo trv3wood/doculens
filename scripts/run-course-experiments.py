@@ -170,8 +170,8 @@ def run(output):
         sections.append(f'<section><h2>{code} {escape(title)}</h2>'
                         f'<p>输入基线 · PSNR {fmt(before["psnr_db"])} dB · SSIM {fmt(before["ssim"])}</p>'
                         f'<div class="panels">{"".join(figures)}</div>'
-                        f'<table><thead><tr><th>处理</th><th>PSNR (dB)</th><th>SSIM</th><th>Δ PSNR</th><th>Δ SSIM</th></tr></thead>'
-                        f'<tbody>{rows}</tbody></table><pre>{escape(json.dumps(parameters, ensure_ascii=False))}</pre></section>')
+                        f'<div class="metrics"><table><thead><tr><th>处理</th><th>PSNR (dB)</th><th>SSIM</th><th>Δ PSNR</th><th>Δ SSIM</th></tr></thead>'
+                        f'<tbody>{rows}</tbody></table></div><pre>{escape(json.dumps(parameters, ensure_ascii=False))}</pre></section>')
     (output / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
     (output / "index.html").write_text('''<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>DocuLens 课程实验</title>
@@ -180,7 +180,7 @@ body{font:16px system-ui;max-width:1040px;margin:auto;padding:2rem 1rem;color:#1
 section{margin:2rem 0;padding-top:1rem;border-top:1px solid #cbd5e1}
 .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:1rem}
 figure{margin:0}img{display:block;width:100%;border:1px solid #cbd5e1}figcaption{margin-top:.4rem}
-table{border-collapse:collapse;margin-top:1rem}th,td{padding:.4rem .7rem;border-bottom:1px solid #cbd5e1;text-align:left}
+.metrics{overflow-x:auto;margin-top:1rem}table{border-collapse:collapse}th,td{padding:.4rem .7rem;border-bottom:1px solid #cbd5e1;text-align:left}
 pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style><h1>DocuLens 数字图像处理实验</h1>
 <p>每组使用固定参考图。— 表示 PSNR 无穷大或差值无定义。</p>
