@@ -1,0 +1,424 @@
+{
+  "seed": 1703,
+  "reference_size": [
+    384,
+    384
+  ],
+  "experiments": [
+    {
+      "code": "C01",
+      "title": "采样与量化",
+      "parameters": {
+        "sampling_sizes": [
+          192,
+          96,
+          48
+        ],
+        "strides": [
+          2,
+          4,
+          8
+        ],
+        "levels": [
+          4,
+          16,
+          64
+        ],
+        "preview": "nearest-neighbor reconstruction"
+      },
+      "before": {
+        "psnr_db": null,
+        "ssim": 1.0
+      },
+      "results": [
+        {
+          "name": "采样 1/2",
+          "image": "C01-02.png",
+          "after": {
+            "psnr_db": 16.713567754988926,
+            "ssim": 0.8134271652993049
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -0.18657283470069508
+          }
+        },
+        {
+          "name": "采样 1/4",
+          "image": "C01-03.png",
+          "after": {
+            "psnr_db": 13.694684059695767,
+            "ssim": 0.6787349600262984
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -0.3212650399737016
+          }
+        },
+        {
+          "name": "采样 1/8",
+          "image": "C01-04.png",
+          "after": {
+            "psnr_db": 12.698139892730136,
+            "ssim": 0.639909003638529
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -0.360090996361471
+          }
+        },
+        {
+          "name": "4 灰度级",
+          "image": "C01-05.png",
+          "after": {
+            "psnr_db": 24.06511936692308,
+            "ssim": 0.9800297457962424
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -0.019970254203757642
+          }
+        },
+        {
+          "name": "16 灰度级",
+          "image": "C01-06.png",
+          "after": {
+            "psnr_db": 35.65737725584495,
+            "ssim": 0.9993191299218636
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -0.0006808700781364418
+          }
+        },
+        {
+          "name": "64 灰度级",
+          "image": "C01-07.png",
+          "after": {
+            "psnr_db": 48.75309182754461,
+            "ssim": 0.9999613660628247
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": -3.8633937175291955e-05
+          }
+        }
+      ]
+    },
+    {
+      "code": "C02",
+      "title": "颜色空间",
+      "parameters": {
+        "channel_display": "BT.601 nominal range"
+      },
+      "before": {
+        "psnr_db": null,
+        "ssim": 1.0
+      },
+      "results": [
+        {
+          "name": "HSV 往返",
+          "image": "C02-02.png",
+          "after": {
+            "psnr_db": 335.97260202287896,
+            "ssim": 1.0
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": 0.0
+          }
+        },
+        {
+          "name": "YCbCr 往返",
+          "image": "C02-03.png",
+          "after": {
+            "psnr_db": 319.29547955987954,
+            "ssim": 1.0000000000003677
+          },
+          "delta": {
+            "psnr_db": null,
+            "ssim": 3.6770586575585185e-13
+          }
+        }
+      ]
+    },
+    {
+      "code": "C03",
+      "title": "图像增强",
+      "parameters": {
+        "capture_gain": 0.46,
+        "offset": 0.18,
+        "gamma": 0.65,
+        "stretch_percentiles": [
+          1,
+          99
+        ]
+      },
+      "before": {
+        "psnr_db": 10.170308454938908,
+        "ssim": 0.8540307866791371
+      },
+      "results": [
+        {
+          "name": "直方图均衡化",
+          "image": "C03-02.png",
+          "after": {
+            "psnr_db": 14.679401544872622,
+            "ssim": 0.8703341469676803
+          },
+          "delta": {
+            "psnr_db": 4.509093089933714,
+            "ssim": 0.01630336028854318
+          }
+        },
+        {
+          "name": "Gamma",
+          "image": "C03-03.png",
+          "after": {
+            "psnr_db": 13.503302740667287,
+            "ssim": 0.8745786981533623
+          },
+          "delta": {
+            "psnr_db": 3.332994285728379,
+            "ssim": 0.02054791147422519
+          }
+        },
+        {
+          "name": "对比度拉伸",
+          "image": "C03-04.png",
+          "after": {
+            "psnr_db": 24.64984763103881,
+            "ssim": 0.9821262314023103
+          },
+          "delta": {
+            "psnr_db": 14.479539176099902,
+            "ssim": 0.12809544472317314
+          }
+        }
+      ]
+    },
+    {
+      "code": "C04",
+      "title": "频域陷波",
+      "parameters": {
+        "frequency_bins_xy": [
+          [
+            29,
+            10
+          ],
+          [
+            51,
+            -14
+          ]
+        ],
+        "radius_bins": 2,
+        "amplitude_each": 0.08
+      },
+      "before": {
+        "psnr_db": 23.536625365481562,
+        "ssim": 0.4702997501957678
+      },
+      "results": [
+        {
+          "name": "FFT 陷波",
+          "image": "C04-02.png",
+          "after": {
+            "psnr_db": 33.0777519024428,
+            "ssim": 0.8345691765563352
+          },
+          "delta": {
+            "psnr_db": 9.541126536961237,
+            "ssim": 0.3642694263605674
+          }
+        }
+      ]
+    },
+    {
+      "code": "C05-defocus",
+      "title": "离焦模糊复原",
+      "parameters": {
+        "psf_shape": [
+          9,
+          9
+        ],
+        "defocus_radius": 4,
+        "motion_length": 9,
+        "noise_sigma": 0.008,
+        "wiener_balance": 0.02,
+        "rl_iterations": 20
+      },
+      "before": {
+        "psnr_db": 16.979853703240423,
+        "ssim": 0.6484837548436058
+      },
+      "results": [
+        {
+          "name": "Wiener",
+          "image": "C05-defocus-02.png",
+          "after": {
+            "psnr_db": 17.137882161959244,
+            "ssim": 0.5626284203141957
+          },
+          "delta": {
+            "psnr_db": 0.15802845871882099,
+            "ssim": -0.08585533452941008
+          }
+        },
+        {
+          "name": "Richardson–Lucy",
+          "image": "C05-defocus-03.png",
+          "after": {
+            "psnr_db": 14.635120476703507,
+            "ssim": 0.5871375441843245
+          },
+          "delta": {
+            "psnr_db": -2.344733226536915,
+            "ssim": -0.06134621065928125
+          }
+        }
+      ]
+    },
+    {
+      "code": "C05-motion",
+      "title": "运动模糊复原",
+      "parameters": {
+        "psf_shape": [
+          9,
+          9
+        ],
+        "defocus_radius": 4,
+        "motion_length": 9,
+        "noise_sigma": 0.008,
+        "wiener_balance": 0.02,
+        "rl_iterations": 20
+      },
+      "before": {
+        "psnr_db": 18.210128140552666,
+        "ssim": 0.755057878550922
+      },
+      "results": [
+        {
+          "name": "Wiener",
+          "image": "C05-motion-02.png",
+          "after": {
+            "psnr_db": 18.226940970976784,
+            "ssim": 0.6214877742795104
+          },
+          "delta": {
+            "psnr_db": 0.01681283042411863,
+            "ssim": -0.13357010427141158
+          }
+        },
+        {
+          "name": "Richardson–Lucy",
+          "image": "C05-motion-03.png",
+          "after": {
+            "psnr_db": 16.33554467518013,
+            "ssim": 0.6995135846858213
+          },
+          "delta": {
+            "psnr_db": -1.8745834653725346,
+            "ssim": -0.055544293865100736
+          }
+        }
+      ]
+    },
+    {
+      "code": "C06",
+      "title": "文档校色与锐化",
+      "parameters": {
+        "channel_gains": [
+          0.9,
+          0.75,
+          0.62
+        ],
+        "sharpen_radius": 1.2,
+        "sharpen_amount": 1.1
+      },
+      "before": {
+        "psnr_db": 9.872475005726645,
+        "ssim": 0.872171369442665
+      },
+      "results": [
+        {
+          "name": "白平衡后灰度",
+          "image": "C06-02.png",
+          "after": {
+            "psnr_db": 15.518089746362463,
+            "ssim": 0.965423978475169
+          },
+          "delta": {
+            "psnr_db": 5.645614740635818,
+            "ssim": 0.09325260903250399
+          }
+        },
+        {
+          "name": "锐化",
+          "image": "C06-03.png",
+          "after": {
+            "psnr_db": 15.795268854733159,
+            "ssim": 0.9300685296123792
+          },
+          "delta": {
+            "psnr_db": 5.9227938490065135,
+            "ssim": 0.057897160169714135
+          }
+        }
+      ]
+    },
+    {
+      "code": "C06-binary",
+      "title": "文档自适应二值化",
+      "parameters": {
+        "reference_and_baseline_threshold": 0.55,
+        "local_window": 31,
+        "threshold_offset": 0.035
+      },
+      "before": {
+        "psnr_db": 16.447859730969302,
+        "ssim": 0.9487212097155769
+      },
+      "results": [
+        {
+          "name": "局部二值化",
+          "image": "C06-binary-02.png",
+          "after": {
+            "psnr_db": 13.384588498093574,
+            "ssim": 0.8955062135308172
+          },
+          "delta": {
+            "psnr_db": -3.063271232875728,
+            "ssim": -0.05321499618475978
+          }
+        }
+      ]
+    },
+    {
+      "code": "C07",
+      "title": "参考真值质量分析",
+      "parameters": {
+        "close_window": 25,
+        "smoothing_sigma": 8,
+        "noise_sigma": 0.008
+      },
+      "before": {
+        "psnr_db": 15.507034051839806,
+        "ssim": 0.9210474826813851
+      },
+      "results": [
+        {
+          "name": "光照恢复",
+          "image": "C07-02.png",
+          "after": {
+            "psnr_db": 22.377391442484452,
+            "ssim": 0.9063094919449726
+          },
+          "delta": {
+            "psnr_db": 6.870357390644646,
+            "ssim": -0.014737990736412576
+          }
+        }
+      ]
+    }
+  ]
+}
