@@ -54,6 +54,36 @@ def spectrum(values):
     return exposure.rescale_intensity(magnitude, in_range=(0, np.percentile(magnitude, 99.8)))
 
 
+def deblur_tv(observed, kernel, weight, checkpoints):
+    """Minimize squared observation error plus isotropic total variation."""
+    # Match the zero extension used to generate both blurred observations.
+    def apply(image, psf):
+        return signal.oaconvolve(image, psf, mode="same")
+
+    estimate = observed.copy()
+    dual_x = np.zeros_like(estimate)
+    dual_y = np.zeros_like(estimate)
+    # The normalized PSF has operator norm <= 1; squared gradient norm <= 8.
+    primal_step, dual_step = .95, .06
+    for iteration in range(1, max(checkpoints) + 1):
+        residual = apply(estimate, kernel) - observed
+        gradient = apply(residual, kernel[::-1, ::-1])
+        gradient[:, :-1] -= dual_x[:, :-1]
+        gradient[:, 1:] += dual_x[:, :-1]
+        gradient[:-1, :] -= dual_y[:-1, :]
+        gradient[1:, :] += dual_y[:-1, :]
+        updated = np.clip(estimate - primal_step * gradient, 0, 1)
+        extrapolated = 2 * updated - estimate
+        dual_x[:, :-1] += dual_step * np.diff(extrapolated, axis=1)
+        dual_y[:-1, :] += dual_step * np.diff(extrapolated, axis=0)
+        scale = np.maximum(1, np.hypot(dual_x, dual_y) / weight)
+        dual_x /= scale
+        dual_y /= scale
+        estimate = updated
+        if iteration in checkpoints:
+            yield iteration, estimate
+
+
 def experiments():
     rgb = reference()
     gray = color.rgb2gray(rgb)
@@ -111,12 +141,17 @@ def experiments():
     for kind, kernel in [("离焦", disk), ("运动", motion)]:
         kernel /= kernel.sum()
         blurred = np.clip(signal.fftconvolve(gray, kernel, mode="same") + noise, 0, 1)
+        checkpoints = (80, 320, 960)
+        restored = dict(deblur_tv(blurred, kernel, weight=.0015, checkpoints=checkpoints))
+        tv = restored[checkpoints[-1]]
         yield ("C05-" + ("defocus" if kind == "离焦" else "motion"), f"{kind}模糊复原", gray, blurred, {
             "Wiener": restoration.wiener(blurred, kernel, balance=.02, clip=False),
             "Richardson–Lucy": restoration.richardson_lucy(blurred, kernel, num_iter=20, clip=False),
-        }, {"点扩散函数": np.kron(kernel / kernel.max(), np.ones((32, 32)))},
+            **{f"全变分 · {step} 次": img for step, img in restored.items()},
+        }, {"小字原图": gray[136:166, 24:204], "小字输入": blurred[136:166, 24:204],
+            "小字复原": tv[136:166, 24:204], "点扩散函数": np.kron(kernel / kernel.max(), np.ones((32, 32)))},
         {"psf_shape": list(kernel.shape), "defocus_radius": 4, "motion_length": 9,
-         "noise_sigma": .008, "wiener_balance": .02, "rl_iterations": 20})
+         "noise_sigma": .008, "wiener_balance": .02, "rl_iterations": 20, "tv_weight": .0015, "tv_iterations": list(checkpoints), "tv_boundary": "zero extension"})
 
     gains = np.array([.90, .75, .62])
     lighting = .67 + .33 * xx / (SIZE - 1)
@@ -167,9 +202,16 @@ def run(output):
                        f'<td>{fmt(row["after"]["psnr_db"])}</td><td>{fmt(row["after"]["ssim"])}</td>'
                        f'<td>{fmt(row["delta"]["psnr_db"])}</td><td>{fmt(row["delta"]["ssim"])}</td></tr>'
                        for row in results)
-        sections.append(f'<section><h2>{code} {escape(title)}</h2>'
+        explanation = ""
+        if code.startswith("C05"):
+            explanation = (
+                "<p>三个全变分结果来自同一次迭代，在标明的步数取样。两类模糊采用相同参数。"
+                "算法用已知模糊核重建观测图像，同时约束纸面上的细碎波动；卷积边界与生成输入时一致。"
+                "真值只参与评价。表中差值均相对于模糊输入。小字对照取自同一区域，展示最后一次迭代的结果。</p>"
+            )
+        sections.append(f'<section id="{code}"><h2>{code} {escape(title)}</h2>'
                         f'<p>输入基线 · PSNR {fmt(before["psnr_db"])} dB · SSIM {fmt(before["ssim"])}</p>'
-                        f'<div class="panels">{"".join(figures)}</div>'
+                        f'{explanation}<div class="panels">{"".join(figures)}</div>'
                         f'<div class="metrics"><table><thead><tr><th>处理</th><th>PSNR (dB)</th><th>SSIM</th><th>Δ PSNR</th><th>Δ SSIM</th></tr></thead>'
                         f'<tbody>{rows}</tbody></table></div><pre>{escape(json.dumps(parameters, ensure_ascii=False))}</pre></section>')
     (output / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n")

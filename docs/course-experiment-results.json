@@ -245,7 +245,14 @@
         "motion_length": 9,
         "noise_sigma": 0.008,
         "wiener_balance": 0.02,
-        "rl_iterations": 20
+        "rl_iterations": 20,
+        "tv_weight": 0.0015,
+        "tv_iterations": [
+          80,
+          320,
+          960
+        ],
+        "tv_boundary": "zero extension"
       },
       "before": {
         "psnr_db": 16.979853703240423,
@@ -275,6 +282,42 @@
             "psnr_db": -2.344733226536915,
             "ssim": -0.06134621065928125
           }
+        },
+        {
+          "name": "全变分 · 80 次",
+          "image": "C05-defocus-04.png",
+          "after": {
+            "psnr_db": 19.61494162154253,
+            "ssim": 0.8169818417468684
+          },
+          "delta": {
+            "psnr_db": 2.6350879183021085,
+            "ssim": 0.16849808690326262
+          }
+        },
+        {
+          "name": "全变分 · 320 次",
+          "image": "C05-defocus-05.png",
+          "after": {
+            "psnr_db": 20.302411501305407,
+            "ssim": 0.8561949645696358
+          },
+          "delta": {
+            "psnr_db": 3.3225577980649845,
+            "ssim": 0.20771120972603008
+          }
+        },
+        {
+          "name": "全变分 · 960 次",
+          "image": "C05-defocus-06.png",
+          "after": {
+            "psnr_db": 20.43829189168255,
+            "ssim": 0.8641159881774014
+          },
+          "delta": {
+            "psnr_db": 3.458438188442127,
+            "ssim": 0.21563223333379566
+          }
         }
       ]
     },
@@ -290,7 +333,14 @@
         "motion_length": 9,
         "noise_sigma": 0.008,
         "wiener_balance": 0.02,
-        "rl_iterations": 20
+        "rl_iterations": 20,
+        "tv_weight": 0.0015,
+        "tv_iterations": [
+          80,
+          320,
+          960
+        ],
+        "tv_boundary": "zero extension"
       },
       "before": {
         "psnr_db": 18.210128140552666,
@@ -319,6 +369,42 @@
           "delta": {
             "psnr_db": -1.8745834653725346,
             "ssim": -0.055544293865100736
+          }
+        },
+        {
+          "name": "全变分 · 80 次",
+          "image": "C05-motion-04.png",
+          "after": {
+            "psnr_db": 23.51669883018539,
+            "ssim": 0.9388418239405926
+          },
+          "delta": {
+            "psnr_db": 5.306570689632725,
+            "ssim": 0.18378394538967058
+          }
+        },
+        {
+          "name": "全变分 · 320 次",
+          "image": "C05-motion-05.png",
+          "after": {
+            "psnr_db": 24.890773409892066,
+            "ssim": 0.960700549764479
+          },
+          "delta": {
+            "psnr_db": 6.680645269339401,
+            "ssim": 0.20564267121355706
+          }
+        },
+        {
+          "name": "全变分 · 960 次",
+          "image": "C05-motion-06.png",
+          "after": {
+            "psnr_db": 25.014172960371944,
+            "ssim": 0.9621771622513046
+          },
+          "delta": {
+            "psnr_db": 6.8040448198192784,
+            "ssim": 0.20711928370038257
           }
         }
       ]
