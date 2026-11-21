@@ -6,6 +6,8 @@ import { fullFrame, isConvex } from "./workers/geometry";
 import type { Corners, Point, ScanMode } from "./workers/protocol";
 import "./style.css";
 
+const appStarted = performance.now();
+
 function element<Type extends HTMLElement>(id: string): Type {
   const found = document.getElementById(id);
   if (!found) throw new Error(`缺少界面元素 #${id}`);
@@ -180,6 +182,7 @@ async function loadEngine() {
     if (disposed) return;
     client = candidate;
     engineState = "ready";
+    log(`计时 引擎就绪：${(performance.now() - appStarted).toFixed(1)}ms`);
     log(`OpenCV 初始化完成：${initialized.initMs.toFixed(1)}ms`);
     log(initialized.buildInformation.slice(0, 5000));
     setStatus(selectedFile ? "点击「生成扫描件」开始处理。" : "");
@@ -214,6 +217,7 @@ fileInput.addEventListener("change", () => {
 
 async function scan() {
   if (!client || !selectedFile || busy) return;
+  const scanStarted = performance.now();
   busy = true;
   invalidateResult();
   updateButtons();
@@ -236,6 +240,7 @@ async function scan() {
     previewReady = true;
     drawCrop();
     updateButtons();
+    log(`计时 原图预览：${(performance.now() - scanStarted).toFixed(1)}ms`);
     const original = document.createElement("canvas");
     original.width = width;
     original.height = height;
@@ -262,11 +267,13 @@ async function scan() {
       0,
       0,
     );
+    if (result.detectMs !== undefined) log(`计时 自动找边：${result.detectMs.toFixed(1)}ms`);
     log(`处理完成：${result.processMs.toFixed(1)}ms`);
     setStatus("正在准备导出文件…");
     scanExports = createScanExports(outputCanvas);
     await updateExport();
     if (exportBlob) {
+      log(`计时 完整扫描：${(performance.now() - scanStarted).toFixed(1)}ms`);
       const boundary = automatic && !result.corners
         ? "；未找到完整纸边，已保留整张照片，可手动调整四角"
         : "；请核对裁切范围";
@@ -302,9 +309,13 @@ formatSelect.addEventListener("change", () => void updateExport());
 saveButton.addEventListener("click", () => {
   if (!exportBlob) return;
   const name = exportName(formatSelect.value as ExportFormat);
+  const saveStarted = performance.now();
   // 不在此处理器中先 await：MApp 需要可信用户动作。
   platform.save(name, exportBlob)
-    .then(() => setStatus(`已请求保存 ${name}`))
+    .then(() => {
+      log(`计时 系统保存：${(performance.now() - saveStarted).toFixed(1)}ms`);
+      setStatus(`已请求保存 ${name}`);
+    })
     .catch((error) => setStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`, true));
 });
 
@@ -324,6 +335,7 @@ shareButton.addEventListener("click", () => {
 
 async function start() {
   updateButtons();
+  log(`计时 首屏可选图：${(performance.now() - appStarted).toFixed(1)}ms`);
   try {
     await platform.connect((theme) => {
       document.documentElement.dataset.mode = theme.mode;

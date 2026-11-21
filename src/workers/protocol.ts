@@ -39,6 +39,7 @@ export interface ProcessedResponse {
   height: number;
   rgba: ArrayBuffer;
   processMs: number;
+  detectMs?: number;
   corners?: Corners;
 }
 

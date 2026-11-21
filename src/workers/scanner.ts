@@ -236,7 +236,9 @@ async function process(request: ProcessRequest) {
     } finally {
       source.delete();
     }
+    const detectStarted = performance.now();
     const corners = request.corners ?? detectCorners(cv, gray);
+    const detectMs = request.corners ? undefined : performance.now() - detectStarted;
     const transform = request.turns ||
       (corners && corners.some(({ x, y }, i) => x !== fullFrame[i].x || y !== fullFrame[i].y));
     if (transform && Math.min(gray.cols, gray.rows) >= 2) {
@@ -258,6 +260,7 @@ async function process(request: ProcessRequest) {
       corners,
       rgba: rgba.buffer,
       processMs: performance.now() - started,
+      detectMs,
     }, [rgba.buffer]);
   } finally {
     for (const mat of [gray, warped, result]) mat.delete();

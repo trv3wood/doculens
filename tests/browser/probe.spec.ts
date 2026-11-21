@@ -56,6 +56,7 @@ test("小图 Worker/WASM 处理、三种导出与网络边界", async ({ page, b
   expect(pdf.getPageCount()).toBe(1);
   const { width, height } = pdf.getPage(0).getSize();
   expect(width / height).toBeCloseTo(640 / 480, 8);
+  await expect(page.locator("#log")).toContainText("PDF 页面：1 页，842.000 × 631.500 pt，宽高比 1.333333");
   expect(pageErrors).toEqual([]);
   expect(externalRequests).toEqual([]);
 });
@@ -67,6 +68,10 @@ test("12MP 图片全分辨率 Worker 处理", async ({ page }) => {
     canvas.height,
   ]);
   expect(dimensions).toEqual([4000, 3000]);
+  const log = page.locator("#log");
+  for (const phase of ["首屏可选图", "引擎就绪", "原图预览", "自动找边", "完整扫描"]) {
+    await expect(log).toContainText(new RegExp(`计时 ${phase}：\\d+(?:\\.\\d+)?ms`));
+  }
   const jpeg = await downloadExport(page, "jpeg");
   expect(jpeg.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
 });

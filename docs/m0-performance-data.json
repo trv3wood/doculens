@@ -1,0 +1,164 @@
+{
+  "run": {
+    "sandbox": "https://linux.do/apps-sandbox/01a1f801-1869-7a35-a7a2-b72ae4d4d7f8/1.0.3-5366af2e",
+    "host": "org.linuxdo.community",
+    "hostVersion": "1.0.5",
+    "hostBuild": "13",
+    "platformVersion": "27.2"
+  },
+  "device": "iPhone 15 Pro Max",
+  "date": "2026-11-21",
+  "fixture": "4000×3000 synthetic JPEG",
+  "saveLocation": "我的 iPhone → Downloads",
+  "attempts": [
+    {
+      "attempt": 1,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 398.0,
+      "wasm_init_ms": 18.0,
+      "preview_ms": 39.0,
+      "detect_ms": 30.0,
+      "full_scan_ms": 306.0,
+      "pdf_prepare_ms": 491.0,
+      "save_ms": 13009.0
+    },
+    {
+      "attempt": 2,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 212.0,
+      "wasm_init_ms": 13.0,
+      "preview_ms": 43.0,
+      "detect_ms": 25.0,
+      "full_scan_ms": 311.0,
+      "pdf_prepare_ms": 478.0,
+      "save_ms": 12737.0
+    },
+    {
+      "attempt": 3,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 204.0,
+      "wasm_init_ms": 13.0,
+      "preview_ms": 39.0,
+      "detect_ms": 26.0,
+      "full_scan_ms": 311.0,
+      "pdf_prepare_ms": 489.0,
+      "save_ms": 13191.0
+    },
+    {
+      "attempt": 4,
+      "picker_ready_ms": 1.0,
+      "engine_ready_ms": 231.0,
+      "wasm_init_ms": 16.0,
+      "preview_ms": 36.0,
+      "detect_ms": 25.0,
+      "full_scan_ms": 302.0,
+      "pdf_prepare_ms": 485.0,
+      "save_ms": 13593.0
+    },
+    {
+      "attempt": 5,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 257.0,
+      "wasm_init_ms": 14.0,
+      "preview_ms": 36.0,
+      "detect_ms": 25.0,
+      "full_scan_ms": 304.0,
+      "pdf_prepare_ms": 487.0,
+      "save_ms": 13133.0
+    },
+    {
+      "attempt": 6,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 386.0,
+      "wasm_init_ms": 23.0,
+      "preview_ms": 42.0,
+      "detect_ms": 26.0,
+      "full_scan_ms": 312.0,
+      "pdf_prepare_ms": 494.0,
+      "save_ms": 13089.0
+    },
+    {
+      "attempt": 7,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 214.0,
+      "wasm_init_ms": 14.0,
+      "preview_ms": 38.0,
+      "detect_ms": 25.0,
+      "full_scan_ms": 309.0,
+      "pdf_prepare_ms": 489.0,
+      "save_ms": 13065.0
+    },
+    {
+      "attempt": 8,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 218.0,
+      "wasm_init_ms": 14.0,
+      "preview_ms": 36.0,
+      "detect_ms": 26.0,
+      "full_scan_ms": 306.0,
+      "pdf_prepare_ms": 496.0,
+      "save_ms": 13309.0
+    },
+    {
+      "attempt": 9,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 223.0,
+      "wasm_init_ms": 13.0,
+      "preview_ms": 38.0,
+      "detect_ms": 26.0,
+      "full_scan_ms": 310.0,
+      "pdf_prepare_ms": 494.0,
+      "save_ms": 13282.0
+    },
+    {
+      "attempt": 10,
+      "picker_ready_ms": 0.0,
+      "engine_ready_ms": 223.0,
+      "wasm_init_ms": 14.0,
+      "preview_ms": 36.0,
+      "detect_ms": 25.0,
+      "full_scan_ms": 308.0,
+      "pdf_prepare_ms": 497.0,
+      "save_ms": 13279.0
+    }
+  ],
+  "summary": {
+    "valid": 10,
+    "failures": 0,
+    "metrics": {
+      "picker_ready_ms": {
+        "p50": 0.0,
+        "p95": 1.0
+      },
+      "engine_ready_ms": {
+        "p50": 223.0,
+        "p95": 398.0
+      },
+      "wasm_init_ms": {
+        "p50": 14.0,
+        "p95": 23.0
+      },
+      "preview_ms": {
+        "p50": 38.0,
+        "p95": 43.0
+      },
+      "detect_ms": {
+        "p50": 25.5,
+        "p95": 30.0
+      },
+      "full_scan_ms": {
+        "p50": 308.5,
+        "p95": 312.0
+      },
+      "pdf_prepare_ms": {
+        "p50": 490.0,
+        "p95": 497.0
+      },
+      "save_ms": {
+        "p50": 13162.0,
+        "p95": 13593.0
+      }
+    },
+    "worker_input_rgba_overlap_lower_bound_bytes": 96000000
+  }
+}

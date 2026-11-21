@@ -3,6 +3,8 @@
 import argparse
 from datetime import datetime
 import json
+import math
+import statistics
 import os
 from pathlib import Path
 import re
@@ -126,6 +128,40 @@ class Device:
         ), "enabled scan button")
         self.click("生成扫描件")
 
+    def select_local_downloads(self):
+        wait_for(lambda: self.find("DOCPicker.actionButton"), "iOS save picker")
+        for _ in range(8):
+            elements = self.elements()
+            local = any("DOC.browsingRoot Source: com.apple.FileProvider.LocalStorage" in
+                        e.get("name", "") for e in elements)
+            titles = {"Downloads", "下载项", "下载"}
+            navigation = (item for bar in elements if bar.tag == "XCUIElementTypeNavigationBar"
+                          for item in bar.iter())
+            if local and any(e.get("visible") == "true" and
+                             e.get("name", "").split(",")[0] in titles for e in navigation):
+                return
+            if local:
+                folder = next((e for e in elements if e.get("visible") == "true"
+                               and e.get("name", "").endswith(", Folder")
+                               and e.get("name", "").split(",")[0] in titles), None)
+                if folder is not None:
+                    self.click(folder.get("name"))
+                    continue
+            location = next((e for e in elements if e.get("visible") == "true"
+                             and e.get("label", "") == "我的iPhone"
+                             and e.tag in ("XCUIElementTypeButton", "XCUIElementTypeCell")), None)
+            if location is not None and not local:
+                self.click(location.get("name"))
+                continue
+            back = next((e for e in elements if e.get("visible") == "true" and e.get("enabled") == "true"
+                         and e.tag == "XCUIElementTypeButton"
+                         and (e.get("name", "").startswith("DOC.navBarButton.back")
+                              or e.get("label") in ("浏览", "上一级", "位置"))), None)
+            if back is None:
+                break
+            self.click(back.get("name"))
+        raise RuntimeError("Choose 我的 iPhone → Downloads in the save picker before retrying")
+
     def save(self, stem, extension, deny=False):
         message = "保存失败：USER_CANCELLED" if deny else f"已请求保存 doculens-scan.{extension}"
         previous = self.diagnostics().count(message)
@@ -134,6 +170,7 @@ class Device:
             self.click("miniapp-authorize-deny")
         else:
             self.click("miniapp-authorize-allow")
+            self.select_local_downloads()
             self.enter("DOCPicker.filenameTextField", stem, clear=True)
             self.click("DOCPicker.actionButton")
         self.expect_log(re.escape(message), previous)
@@ -141,6 +178,13 @@ class Device:
     def click_after_reveal(self, name, direction="up"):
         self.reveal(name, direction, kind="Button")
         self.click(name)
+
+    def reopen_sandbox(self, url):
+        self.mobile("activateApp", bundleId=HOST)
+        self.settings(HOST)
+        if self.find("关闭"):
+            self.click("关闭")
+        self.mobile("deepLink", url=url, bundleId=HOST)
 
     def verify_files(self, stem):
         self.mobile("activateApp", bundleId=FILES)
@@ -161,6 +205,63 @@ def wait_for(check, description, timeout=24):
         if time.monotonic() >= end:
             raise RuntimeError(f"Timed out waiting for {description}")
         time.sleep(.35)
+
+
+def measure_device(device, args, stem, report):
+    patterns = {
+        "picker_ready_ms": r"计时 首屏可选图：([\d.]+)ms",
+        "engine_ready_ms": r"计时 引擎就绪：([\d.]+)ms",
+        "wasm_init_ms": r"OpenCV 初始化完成：([\d.]+)ms",
+        "preview_ms": r"计时 原图预览：([\d.]+)ms",
+        "detect_ms": r"计时 自动找边：([\d.]+)ms",
+        "full_scan_ms": r"计时 完整扫描：([\d.]+)ms",
+        "pdf_prepare_ms": r"PDF 准备完成：\d+ bytes，([\d.]+)ms",
+        "save_ms": r"计时 系统保存：([\d.]+)ms",
+    }
+    attempts = []
+    for index in range(1, args.measurements + 1):
+        attempt = {"attempt": index}
+        try:
+            device.reopen_sandbox(args.sandbox)
+            device.load_fixture(args.jpeg_fixture, reveal=False)
+            device.open_diagnostics()
+            device.expect_log(r"Worker 正在处理 4000×3000")
+            device.select_format("单页 PDF", r"PDF 准备完成")
+            device.save(f"{stem}-perf-{index:02}", "pdf")
+            log = device.diagnostics()
+            (report / f"performance-{index:02}.log").write_text(log + "\n")
+            attempt.update({name: float(re.findall(pattern, log)[-1])
+                            for name, pattern in patterns.items() if re.findall(pattern, log)})
+            if any(name not in attempt for name in patterns):
+                raise RuntimeError("Missing performance markers")
+        except (RuntimeError, OSError) as error:
+            attempt["error"] = str(error)
+        attempts.append(attempt)
+        (report / "performance-attempts.json").write_text(json.dumps(attempts, indent=2) + "\n")
+        print(f"Performance {index}/{args.measurements}: {attempt.get('error', 'recorded')}", flush=True)
+
+    valid = [attempt for attempt in attempts if "error" not in attempt]
+    summary = {"valid": len(valid), "failures": len(attempts) - len(valid), "metrics": {},
+               "worker_input_rgba_overlap_lower_bound_bytes": 2 * 4 * 4000 * 3000}
+    for name in patterns:
+        samples = sorted(attempt[name] for attempt in valid)
+        if samples:
+            summary["metrics"][name] = {
+                "p50": statistics.median(samples), "p95": samples[math.ceil(.95 * len(samples)) - 1],
+            }
+    (report / "performance-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    if len(valid) < 10:
+        raise RuntimeError(f"Need at least 10 valid performance trials; got {len(valid)}")
+
+
+def verify_continuous(device, args, report):
+    device.reopen_sandbox(args.sandbox)
+    for index, fixture in enumerate(args.continuous_fixture):
+        device.load_fixture(fixture, reveal=index != 0)
+        device.open_diagnostics()
+        device.expect_log(r"文件已准备", index)
+    (report / "continuous.log").write_text(device.diagnostics() + "\n")
+    print("PASS: five distinct documents in one sandbox session", flush=True)
 
 
 def verify_pdf(path, width, height):
@@ -188,9 +289,19 @@ def main():
     parser.add_argument("--jpeg-fixture", default="doculens-test-12mp, jpg",
                         help="Exact iOS Files accessibility name, without extension before the comma")
     parser.add_argument("--smartdoc-fixture", default="datasheet001-02, png")
+    parser.add_argument("--performance-only", action="store_true", help="Run only the timing trials")
+    parser.add_argument("--measurements", type=int, default=0,
+                        help="Run at least 10 cold sandbox openings and 12MP scans")
+    parser.add_argument("--continuous-fixture", action="append", default=[],
+                        help="Repeat for each of five distinct Files fixture names")
+    parser.add_argument("--extended-fixture", help="Files fixture name for a 6000×4000 JPEG")
     parser.add_argument("--pdf-dir", type=Path, help="Mac directory synced with the iPhone save location")
     parser.add_argument("--report-dir", type=Path, default=Path("/tmp/doculens-mapp-reports"))
     args = parser.parse_args()
+    if (args.measurements != 0 or args.performance_only) and args.measurements < 10:
+        parser.error("--measurements must be zero or at least 10")
+    if args.continuous_fixture and (len(args.continuous_fixture) != 5 or len(set(args.continuous_fixture)) != 5):
+        parser.error("provide five distinct --continuous-fixture entries")
     url = urlsplit(args.sandbox)
     if (url.scheme, url.netloc) != ("https", "linux.do") or not re.fullmatch(
         r"/apps-sandbox/01a1f801-1869-7a35-a7a2-b72ae4d4d7f8/[^/]+-[a-f0-9]{8}", url.path
@@ -222,6 +333,9 @@ def main():
             "platformVersion": device.capabilities.get("platformVersion"),
         }, indent=2) + "\n")
         device.settings(HOST)
+        if args.performance_only:
+            measure_device(device, args, stem, report)
+            return
         device.mobile("deepLink", url=args.sandbox, bundleId=HOST)
         # Click as soon as available. This checks the flow even when initialization wins the race.
         device.load_fixture(args.jpeg_fixture, reveal=False)
@@ -267,6 +381,19 @@ def main():
             print("PASS: PDF page count and aspect ratio")
         else:
             print("PENDING: independent verification of the saved PDF (supply --pdf-dir)")
+        if args.extended_fixture:
+            device.reopen_sandbox(args.sandbox)
+            device.load_fixture(args.extended_fixture, reveal=False)
+            device.open_diagnostics()
+            device.expect_log(r"属于扩展支持范围")
+            device.expect_log(r"Worker 正在处理 6000×4000")
+            device.expect_log(r"文件已准备")
+            (report / "24mp.log").write_text(device.diagnostics() + "\n")
+            print("PASS: 24MP extended-range warning and scan", flush=True)
+        if args.continuous_fixture:
+            verify_continuous(device, args, report)
+        if args.measurements:
+            measure_device(device, args, stem, report)
         print("Manual checks: cropped preview retains text and rotated output orientation")
     finally:
         try:
