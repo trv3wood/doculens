@@ -191,7 +191,7 @@ class Device:
         self.settings(FILES)
         self.click("最近项目")
         self.click("搜索")
-        self.enter("搜索", stem)
+        self.enter("搜索", stem, clear=True)
         expected = {f"{stem}, {extension}" for extension in ("jpg", "png", "pdf")}
         wait_for(lambda: expected <= {e.get("name") for e in self.elements()}, "three saved files")
 
