@@ -146,12 +146,15 @@ async function updateExport() {
   try {
     const started = performance.now();
     const { file, reused } = scanExports(format);
-    const blob = await file;
+    const { blob, pdf } = await file;
     if (generation !== exportGeneration) return;
     exportBlob = blob;
     log(reused
       ? `${format.toUpperCase()} 复用导出文件：${blob.size} bytes`
       : `${format.toUpperCase()} 准备完成：${blob.size} bytes，${(performance.now() - started).toFixed(1)}ms`);
+    if (pdf) {
+      log(`PDF 页面：${pdf.pageCount} 页，${pdf.width.toFixed(3)} × ${pdf.height.toFixed(3)} pt，宽高比 ${(pdf.width / pdf.height).toFixed(6)}`);
+    }
   } catch (error) {
     if (generation !== exportGeneration) return;
     setStatus(`导出准备失败：${error instanceof Error ? error.message : String(error)}`, true);
