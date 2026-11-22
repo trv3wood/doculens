@@ -4,6 +4,6 @@
     "lib": ["ES2022", "WebWorker"],
     "types": []
   },
-  "include": ["scanner.ts", "protocol.ts"],
+  "include": ["scanner.ts", "protocol.ts", "cv.ts", "occlusion.ts", "geometry.ts", "enhance/*.ts"],
   "exclude": []
 }

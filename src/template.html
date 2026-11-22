@@ -21,6 +21,17 @@
         </label>
         <button id="process" class="primary" type="button" disabled>生成扫描件</button>
       </div>
+      <div class="enhancements">
+        <label class="check"><input id="moire" type="checkbox" /> 周期噪声/摩尔纹</label>
+        <label class="check"><input id="deblur" type="checkbox" /> 模糊复原</label>
+        <label class="field" for="blur-type" id="blur-type-field" hidden>模糊类型
+          <select id="blur-type">
+            <option value="auto">自动</option>
+            <option value="motion">运动</option>
+            <option value="defocus">失焦</option>
+          </select>
+        </label>
+      </div>
     </section>
 
     <div class="feedback">

@@ -2,7 +2,7 @@
 
 - OpenCV：4.12.0，固定源码提交。
 - Emscripten：4.0.21，固定 amd64 镜像 digest；默认通过 Podman 构建并继承代理环境。
-- 仅导出扫描所需的 `core` / `imgproc` 绑定。
+- 仅导出扫描所需的 `core` / `imgproc` 绑定，包含频域增强所需的 `dft` 与 `getOptimalDFTSize`。
 - 单线程、SIMD128、外部 WASM、`wasmBinary` 延迟初始化。
 - 禁用动态执行、文件系统、pthreads 和远程脚本加载。
 

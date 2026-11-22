@@ -37,6 +37,7 @@ function quadIoU(truth, prediction) {
 
 const [, , samples, output] = process.argv;
 if (!samples || !output) throw new Error("Usage: node scripts/evaluate-m0-quality.mjs SAMPLE_DIR REPORT_DIR");
+const enhancements = process.env.M1_ENHANCEMENTS === "1";
 const truth = JSON.parse(await readFile(join(samples, "truth.json"), "utf8"));
 await mkdir(output, { recursive: true });
 const routes = new Map([
@@ -72,7 +73,7 @@ try {
     });
   }
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  const report = await page.evaluate(async (annotations) => {
+  const report = await page.evaluate(async ({ annotations, enhancements }) => {
     const worker = new Worker("/worker");
     let id = 0;
     function send(message, transfer) {
@@ -90,10 +91,10 @@ try {
       image.height = height;
       return image.getContext("2d", { willReadFrequently: true });
     }
-    function scan(ctx) {
+    function scan(ctx, options = {}) {
       const { width, height } = ctx.canvas;
       const rgba = ctx.getImageData(0, 0, width, height).data.buffer;
-      return send({ type: "process", width, height, rgba, turns: 0, mode: "enhanced" }, [rgba]);
+      return send({ type: "process", width, height, rgba, turns: 0, mode: "enhanced", ...options }, [rgba]);
     }
     function polygon(ctx, points, color) {
       ctx.strokeStyle = color;
@@ -183,12 +184,45 @@ try {
         clean.fillText(`Line ${line + 1} / ${seed + line * 17} : readable text.`, 32, 100 + line * 20);
       }
       const reference = clean.getImageData(0, 0, width, height).data;
-      for (const degradation of ["shadow", "noise", "blur", "low-resolution"]) {
+      const degradations = enhancements
+        ? ["shadow", "noise", "blur", "low-resolution", "periodic", "motion-blur", "defocus-blur"]
+        : ["shadow", "noise", "blur", "low-resolution"];
+      for (const degradation of degradations) {
         const input = canvas(width, height);
         if (degradation === "low-resolution") {
           const small = canvas(width / 3 | 0, height / 3 | 0);
           small.drawImage(clean.canvas, 0, 0, small.canvas.width, small.canvas.height);
           input.drawImage(small.canvas, 0, 0, width, height);
+        } else if (degradation === "periodic") {
+          input.drawImage(clean.canvas, 0, 0);
+          const image = input.getImageData(0, 0, width, height);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const index = (y * width + x) * 4;
+              const stripe = 22 * Math.sin(2 * Math.PI * (.08 * x + .03 * y));
+              for (let channel = 0; channel < 3; channel++) {
+                image.data[index + channel] = Math.max(0, Math.min(255, image.data[index + channel] + stripe));
+              }
+            }
+          }
+          input.putImageData(image, 0, 0);
+        } else if (degradation === "motion-blur") {
+          input.fillStyle = "#f5f5f5";
+          input.fillRect(0, 0, width, height);
+          input.globalAlpha = 1 / 9;
+          for (let offset = -4; offset <= 4; offset++) input.drawImage(clean.canvas, offset, 0);
+          input.globalAlpha = 1;
+        } else if (degradation === "defocus-blur") {
+          input.fillStyle = "#f5f5f5";
+          input.fillRect(0, 0, width, height);
+          input.globalAlpha = 1 / 25;
+          for (let sy = -2; sy <= 2; sy++) {
+            for (let sx = -2; sx <= 2; sx++) {
+              if (Math.hypot(sx * 1.6, sy * 1.6) > 4) continue;
+              input.drawImage(clean.canvas, sx * 1.6, sy * 1.6);
+            }
+          }
+          input.globalAlpha = 1;
         } else {
           if (degradation === "blur") input.filter = "blur(1.5px)";
           input.drawImage(clean.canvas, 0, 0);
@@ -207,18 +241,40 @@ try {
         }
         input.putImageData(data, 0, 0);
         const before = metrics(reference, data.data, width, height);
-        const result = await scan(input);
+        const enhancementOptions = degradation === "periodic"
+          ? { moire: true }
+          : degradation === "motion-blur"
+            ? { deblur: true, blurType: "motion" }
+            : degradation === "defocus-blur"
+              ? { deblur: true, blurType: "defocus" }
+              : null;
+        const result = enhancementOptions
+          ? await scan(input, {
+            ...enhancementOptions,
+            mode: "gray",
+            corners: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }],
+          })
+          : await scan(input);
         const after = result.width === width && result.height === height
           ? metrics(reference, new Uint8ClampedArray(result.rgba), width, height)
           : null;
-        synthetic.push({ seed, degradation, before, after, delta: after && {
-          psnr: after.psnr - before.psnr, ssim: after.ssim - before.ssim,
-        } });
+        synthetic.push({
+          seed,
+          degradation,
+          before,
+          after,
+          delta: after && {
+            psnr: after.psnr - before.psnr,
+            ssim: after.ssim - before.ssim,
+          },
+          spectral: result.spectral ?? null,
+          restore: result.restore ?? null,
+        });
       }
     }
     worker.terminate();
     return { frames, synthetic };
-  }, Object.entries(truth));
+  }, { annotations: Object.entries(truth), enhancements });
 
   if (diagnostics.length) await writeFile(join(output, "diagnostics.log"), diagnostics.join("\n"));
   const cards = [];

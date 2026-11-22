@@ -218,6 +218,10 @@ def measure_device(device, args, stem, report):
         "pdf_prepare_ms": r"PDF 准备完成：\d+ bytes，([\d.]+)ms",
         "save_ms": r"计时 系统保存：([\d.]+)ms",
     }
+    enhancement_patterns = {
+        "spectral_ms": r"计时 C04 频域分析：([\d.]+)ms",
+        "restore_ms": r"计时 C05 模糊复原：([\d.]+)ms",
+    }
     attempts = []
     for index in range(1, args.measurements + 1):
         attempt = {"attempt": index}
@@ -231,7 +235,8 @@ def measure_device(device, args, stem, report):
             log = device.diagnostics()
             (report / f"performance-{index:02}.log").write_text(log + "\n")
             attempt.update({name: float(re.findall(pattern, log)[-1])
-                            for name, pattern in patterns.items() if re.findall(pattern, log)})
+                            for name, pattern in {**patterns, **enhancement_patterns}.items()
+                            if re.findall(pattern, log)})
             if any(name not in attempt for name in patterns):
                 raise RuntimeError("Missing performance markers")
         except (RuntimeError, OSError) as error:

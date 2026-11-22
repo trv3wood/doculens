@@ -80,6 +80,10 @@ button.primary { background: var(--accent); color: var(--on-accent); border-colo
 .file-input:disabled + .button { cursor: not-allowed; opacity: .58; }
 .file-label { display: inline-flex; align-items: center; flex: none; }
 .primary-actions, .crop-actions, .export { flex-wrap: wrap; }
+.enhancements { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; }
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.enhance-hint { font-size: 12px; line-height: 1.45; }
 .field { color: var(--muted); }
 .muted { margin: 0; color: var(--muted); }
 #file-info { overflow-wrap: anywhere; }

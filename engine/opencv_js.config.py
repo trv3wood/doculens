@@ -4,9 +4,9 @@
 core = {
     "": [
         "absdiff", "add", "addWeighted", "bitwise_not", "convertScaleAbs",
-        "countNonZero", "divide", "LUT", "max", "mean", "meanStdDev",
-        "merge", "min", "minMaxLoc", "multiply", "normalize", "split",
-        "subtract",
+        "countNonZero", "dft", "divide", "getOptimalDFTSize", "LUT", "max",
+        "mean", "meanStdDev", "merge", "min", "minMaxLoc", "multiply",
+        "normalize", "split", "subtract",
     ],
 }
 

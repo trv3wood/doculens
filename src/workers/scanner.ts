@@ -4,54 +4,14 @@ import type {
   ProcessRequest,
   ScannerRequest,
   ScannerResponse,
+  SelftestResponse,
 } from "./protocol";
+import type { CvMat, CvModule } from "./cv";
 
 import { recoverOccluded } from "./occlusion";
 import { fullFrame, isConvex, orderCorners } from "./geometry";
-
-interface CvMat {
-  data: Uint8Array;
-  data32S: Int32Array;
-  rows: number;
-  cols: number;
-  delete(): void;
-}
-
-interface CvSize { width: number; height: number }
-
-interface CvModule {
-  Mat: new () => CvMat;
-  MatVector: new () => { size(): number; get(index: number): CvMat; delete(): void };
-  Size: new (width: number, height: number) => CvSize;
-  COLOR_RGBA2GRAY: number;
-  COLOR_GRAY2RGBA: number;
-  CV_32FC2: number;
-  MORPH_RECT: number;
-  MORPH_CLOSE: number;
-  RETR_LIST: number;
-  CHAIN_APPROX_SIMPLE: number;
-  INTER_AREA: number;
-  INTER_LINEAR: number;
-  BORDER_DEFAULT: number;
-  ADAPTIVE_THRESH_GAUSSIAN_C: number;
-  THRESH_BINARY: number;
-  matFromImageData(image: { data: Uint8ClampedArray; width: number; height: number }): CvMat;
-  matFromArray(rows: number, cols: number, type: number, data: number[]): CvMat;
-  cvtColor(source: CvMat, target: CvMat, code: number): void;
-  resize(source: CvMat, target: CvMat, size: CvSize, fx: number, fy: number, interpolation: number): void;
-  GaussianBlur(source: CvMat, target: CvMat, size: CvSize, sigmaX: number, sigmaY: number, border: number): void;
-  Canny(source: CvMat, target: CvMat, low: number, high: number, aperture: number, l2: boolean): void;
-  getStructuringElement(shape: number, size: CvSize): CvMat;
-  morphologyEx(source: CvMat, target: CvMat, operation: number, kernel: CvMat): void;
-  findContours(source: CvMat, contours: InstanceType<CvModule["MatVector"]>, hierarchy: CvMat, mode: number, method: number): void;
-  contourArea(contour: CvMat): number;
-  arcLength(contour: CvMat, closed: boolean): number;
-  approxPolyDP(contour: CvMat, approximation: CvMat, epsilon: number, closed: boolean): void;
-  getPerspectiveTransform(source: CvMat, target: CvMat): CvMat;
-  warpPerspective(source: CvMat, target: CvMat, matrix: CvMat, size: CvSize): void;
-  adaptiveThreshold(source: CvMat, target: CvMat, max: number, method: number, type: number, block: number, c: number): void;
-  getBuildInformation?: () => string;
-}
+import { runSpectral } from "./enhance/spectral";
+import { runRestore } from "./enhance/restore";
 
 declare const cv: (options: { wasmBinary: ArrayBuffer }) => CvModule | Promise<CvModule>;
 
@@ -74,6 +34,7 @@ async function initialize(id: number, wasm: ArrayBuffer) {
       type: "initialized",
       initMs: performance.now() - started,
       buildInformation: module.getBuildInformation?.() ?? "OpenCV ready",
+      dft: typeof module.dft === "function",
     });
   } catch (error) {
     engine = null;
@@ -303,6 +264,64 @@ function normalizeLighting(cv: CvModule, gray: CvMat) {
   }
 }
 
+function selftest(module: CvModule, id: number) {
+  const started = performance.now();
+  const constants = {
+    inverse: (module as CvModule & { DFT_INVERSE?: number }).DFT_INVERSE ?? 1,
+    scale: (module as CvModule & { DFT_SCALE?: number }).DFT_SCALE ?? 2,
+    complexOutput: (module as CvModule & { DFT_COMPLEX_OUTPUT?: number }).DFT_COMPLEX_OUTPUT ?? 16,
+    realOutput: (module as CvModule & { DFT_REAL_OUTPUT?: number }).DFT_REAL_OUTPUT ?? 32,
+  };
+  const size = 64;
+  const mat = new module.Mat(size, size, module.CV_32FC2);
+  try {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const index = y * size + x;
+        mat.data32F[2 * index] = Math.cos((2 * Math.PI * (5 * x + 7 * y)) / size);
+        mat.data32F[2 * index + 1] = 0;
+      }
+    }
+    const before = mat.data32F.slice();
+    if (!module.dft) {
+      const response: SelftestResponse = {
+        id, type: "selftest", dft: false, constants, maxError: Infinity,
+        optimal4000: 0, optimal3000: 0, inPlace: false, ms: performance.now() - started,
+      };
+      post(response);
+      return;
+    }
+    module.dft(mat, mat, 0, 0);
+    const forwardData = mat.data32F;
+    const inPlace = forwardData.some((value, index) => value !== before[index]);
+    module.dft(mat, mat, constants.inverse | constants.scale, 0);
+    const restored = mat.data32F;
+    let maxError = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const index = y * size + x;
+        const expected = Math.cos((2 * Math.PI * (5 * x + 7 * y)) / size);
+        maxError = Math.max(maxError, Math.abs(restored[2 * index] - expected));
+        maxError = Math.max(maxError, Math.abs(restored[2 * index + 1]));
+      }
+    }
+    const response: SelftestResponse = {
+      id,
+      type: "selftest",
+      dft: true,
+      constants,
+      maxError,
+      optimal4000: module.getOptimalDFTSize?.(4000) ?? 0,
+      optimal3000: module.getOptimalDFTSize?.(3000) ?? 0,
+      inPlace,
+      ms: performance.now() - started,
+    };
+    post(response);
+  } finally {
+    mat.delete();
+  }
+}
+
 async function process(request: ProcessRequest) {
   if (!engine) throw new Error("请先初始化 OpenCV");
   const cv = await engine;
@@ -310,6 +329,7 @@ async function process(request: ProcessRequest) {
   const gray = new cv.Mat();
   const warped = new cv.Mat();
   const result = new cv.Mat();
+  let restoredMat: CvMat | null = null;
   try {
     const source = cv.matFromImageData({
       data: new Uint8ClampedArray(request.rgba),
@@ -330,12 +350,16 @@ async function process(request: ProcessRequest) {
       rectify(cv, gray, warped, corners ?? fullFrame, request.turns);
     }
     const scan = warped.rows ? warped : gray;
-    if (request.mode !== "gray") normalizeLighting(cv, scan);
+    const spectral = request.moire ? runSpectral(cv, scan, true) : undefined;
+    const restored = request.deblur ? runRestore(cv, scan, request.blurType ?? "auto") : undefined;
+    restoredMat = restored?.mat ?? null;
+    const active = restoredMat ?? scan;
+    if (request.mode !== "gray") normalizeLighting(cv, active);
     if (request.mode === "binary") {
-      const block = Math.max(3, Math.round(Math.min(scan.cols, scan.rows) / 35) | 1);
-      cv.adaptiveThreshold(scan, scan, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, block, 12);
+      const block = Math.max(3, Math.round(Math.min(active.cols, active.rows) / 35) | 1);
+      cv.adaptiveThreshold(active, active, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, block, 12);
     }
-    cv.cvtColor(scan, result, cv.COLOR_GRAY2RGBA);
+    cv.cvtColor(active, result, cv.COLOR_GRAY2RGBA);
     const rgba = new Uint8Array(result.data);
     post({
       id: request.id,
@@ -346,8 +370,11 @@ async function process(request: ProcessRequest) {
       rgba: rgba.buffer,
       processMs: performance.now() - started,
       detectMs,
+      spectral,
+      restore: restored?.diagnostics,
     }, [rgba.buffer]);
   } finally {
+    restoredMat?.delete();
     for (const mat of [gray, warped, result]) mat.delete();
   }
 }
@@ -355,7 +382,10 @@ async function process(request: ProcessRequest) {
 async function handle(request: ScannerRequest) {
   try {
     if (request.type === "init") await initialize(request.id, request.wasm);
-    else await process(request);
+    else if (request.type === "selftest") {
+      if (!engine) throw new Error("请先初始化 OpenCV");
+      selftest(await engine, request.id);
+    } else await process(request);
   } catch (error) {
     post({
       id: request.id,

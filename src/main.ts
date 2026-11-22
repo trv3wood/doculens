@@ -3,7 +3,14 @@ import { ScannerClient } from "./workers/client";
 import { createScanExports, exportName, type ExportFormat } from "./export";
 import { validateImageInput } from "./image/input";
 import { fullFrame, isConvex } from "./workers/geometry";
-import type { Corners, Point, ScanMode } from "./workers/protocol";
+import type {
+  BlurType,
+  Corners,
+  Point,
+  RestoreDiagnostics,
+  ScanMode,
+  SpectralDiagnostics,
+} from "./workers/protocol";
 import "./style.css";
 
 const appStarted = performance.now();
@@ -26,6 +33,10 @@ const status = element<HTMLParagraphElement>("status");
 const logView = element<HTMLPreElement>("log");
 const inputCanvas = element<HTMLCanvasElement>("input");
 const modeSelect = element<HTMLSelectElement>("mode");
+const moireToggle = element<HTMLInputElement>("moire");
+const deblurToggle = element<HTMLInputElement>("deblur");
+const blurTypeSelect = element<HTMLSelectElement>("blur-type");
+const blurTypeField = element<HTMLLabelElement>("blur-type-field");
 const rotateButton = element<HTMLButtonElement>("rotate");
 const redetectButton = element<HTMLButtonElement>("redetect");
 const resetCropButton = element<HTMLButtonElement>("reset-crop");
@@ -49,6 +60,11 @@ let corners: Corners | undefined;
 let turns = 0;
 let previewReady = false;
 let scanExports: ReturnType<typeof createScanExports> | null = null;
+let moireEnabled = false;
+let deblurEnabled = false;
+let blurType: BlurType = "auto";
+let engineSupportsDft = false;
+let enhanceTimer: number | null = null;
 
 function invalidateResult() {
   exportGeneration++;
@@ -121,6 +137,47 @@ function setStatus(message: string, error = false) {
   log(message);
 }
 
+function logSpectral(diagnostics: SpectralDiagnostics) {
+  if (diagnostics.applied) {
+    log(`计时 C04 频域分析：${diagnostics.ms.toFixed(1)}ms`);
+    const sigma = diagnostics.sigmaPx ? `，陷波 σ=${diagnostics.sigmaPx}px` : "";
+    log(`C04 峰值 ${diagnostics.peakPairs} 对，置信度 ${diagnostics.confidence.toFixed(2)}，模式 ${diagnostics.mode}${sigma}`);
+    if (diagnostics.detail) log(`C04 诊断：${diagnostics.detail}`);
+    return;
+  }
+  const reasons: Record<string, string> = {
+    "no-peaks": "未检测到可信周期峰",
+    "too-many-peaks": "疑似纹理误判，候选峰过多",
+    guard: "处理后文字边缘损失过多，已回退",
+    memory: "内存不足",
+    error: "当前引擎不支持频域增强",
+  };
+  const detail = diagnostics.detail ? `（${diagnostics.detail}）` : "";
+  log(`频域增强跳过：${reasons[diagnostics.reason ?? ""] ?? "未检测到可信周期峰"}${detail}`);
+}
+
+function logRestore(diagnostics: RestoreDiagnostics) {
+  if (diagnostics.applied) {
+    const method = { "full-wiener": "全图 Wiener", "ola-wiener": "分块 Wiener", fir: "FIR 近似" }[diagnostics.method ?? "fir"];
+    log(`计时 C05 模糊复原：${diagnostics.ms.toFixed(1)}ms（${method}，${diagnostics.psfType}）`);
+    const psf = diagnostics.psf;
+    const detail = psf?.lengthPx !== undefined
+      ? `运动长度 ${psf.lengthPx.toFixed(1)}px，角度 ${(psf.angleDeg ?? 0).toFixed(0)}°`
+      : `离焦半径 ${(psf?.radiusPx ?? 0).toFixed(1)}px`;
+    log(`C05 ${detail}，置信度 ${diagnostics.confidence.toFixed(2)}`);
+    return;
+  }
+  const reasons: Record<string, string> = {
+    "psf-low-confidence": "未能可靠估计 PSF",
+    "out-of-range": "模糊超出支持范围（运动 3–31px，失焦 1.5–12px）",
+    "low-detail": "图像细节不足，无法估计模糊",
+    memory: "内存不足",
+    error: "当前引擎不支持频域增强",
+  };
+  const detail = diagnostics.detail ? `（${diagnostics.detail}）` : "";
+  log(`模糊复原跳过：${reasons[diagnostics.reason ?? ""] ?? "未能可靠估计 PSF"}${detail}`);
+}
+
 function updateButtons() {
   retryButton.hidden = engineState !== "failed";
   workspace.hidden = !previewReady;
@@ -132,6 +189,11 @@ function updateButtons() {
   fileInput.disabled = busy;
   formatSelect.disabled = busy;
   modeSelect.disabled = busy;
+  const enhanceDisabled = busy || !client || !engineSupportsDft;
+  moireToggle.disabled = enhanceDisabled;
+  deblurToggle.disabled = enhanceDisabled;
+  blurTypeField.hidden = !deblurEnabled;
+  blurTypeSelect.disabled = busy || !deblurEnabled || !engineSupportsDft;
   rotateButton.disabled = redetectButton.disabled = resetCropButton.disabled = busy || !previewReady;
   handles.forEach((handle) => { handle.disabled = busy; });
   processButton.disabled = busy || !client || !selectedFile;
@@ -182,14 +244,21 @@ async function loadEngine() {
     if (disposed) return;
     client = candidate;
     engineState = "ready";
+    engineSupportsDft = initialized.dft;
     log(`计时 引擎就绪：${(performance.now() - appStarted).toFixed(1)}ms`);
     log(`OpenCV 初始化完成：${initialized.initMs.toFixed(1)}ms`);
     log(initialized.buildInformation.slice(0, 5000));
+    if (!engineSupportsDft) {
+      moireToggle.checked = deblurToggle.checked = false;
+      moireEnabled = deblurEnabled = false;
+      log("当前引擎不支持 dft，频域增强开关已禁用");
+    }
     setStatus(selectedFile ? "点击「生成扫描件」开始处理。" : "");
   } catch (error) {
     startingClient?.terminate();
     if (disposed) return;
     engineState = "failed";
+    engineSupportsDft = false;
     log(`引擎加载失败：${error instanceof Error ? error.message : String(error)}`);
     setStatus("扫描功能加载失败，请重试。", true);
   } finally {
@@ -254,7 +323,15 @@ async function scan() {
     setStatus("正在生成扫描件…");
     const automatic = !corners;
     const result = await client.process({
-      width, height, rgba: image.data.buffer, corners, turns, mode: modeSelect.value as ScanMode,
+      width,
+      height,
+      rgba: image.data.buffer,
+      corners,
+      turns,
+      mode: modeSelect.value as ScanMode,
+      moire: moireEnabled,
+      deblur: deblurEnabled,
+      blurType: deblurEnabled ? blurType : undefined,
     });
     corners = result.corners ?? fullFrame;
     drawCrop();
@@ -268,6 +345,8 @@ async function scan() {
       0,
     );
     if (result.detectMs !== undefined) log(`计时 自动找边：${result.detectMs.toFixed(1)}ms`);
+    if (result.spectral) logSpectral(result.spectral);
+    if (result.restore) logRestore(result.restore);
     log(`处理完成：${result.processMs.toFixed(1)}ms`);
     setStatus("正在准备导出文件…");
     scanExports = createScanExports(outputCanvas);
@@ -304,6 +383,28 @@ modeSelect.addEventListener("change", () => {
   if (previewReady) void scan();
 });
 
+function scheduleEnhancementScan() {
+  if (enhanceTimer !== null) clearTimeout(enhanceTimer);
+  enhanceTimer = window.setTimeout(() => {
+    enhanceTimer = null;
+    if (previewReady && !busy) void scan();
+  }, 250);
+}
+
+for (const toggle of [moireToggle, deblurToggle]) {
+  toggle.addEventListener("change", () => {
+    moireEnabled = moireToggle.checked;
+    deblurEnabled = deblurToggle.checked;
+    invalidateResult();
+    updateButtons();
+    if (previewReady) scheduleEnhancementScan();
+  });
+}
+blurTypeSelect.addEventListener("change", () => {
+  blurType = blurTypeSelect.value as BlurType;
+  if (previewReady && deblurEnabled) scheduleEnhancementScan();
+});
+
 formatSelect.addEventListener("change", () => void updateExport());
 
 saveButton.addEventListener("click", () => {
@@ -334,6 +435,9 @@ shareButton.addEventListener("click", () => {
 });
 
 async function start() {
+  moireEnabled = moireToggle.checked;
+  deblurEnabled = deblurToggle.checked;
+  blurType = blurTypeSelect.value as BlurType;
   updateButtons();
   log(`计时 首屏可选图：${(performance.now() - appStarted).toFixed(1)}ms`);
   try {

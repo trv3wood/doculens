@@ -59,7 +59,17 @@
 | blur | 83 | 19.73 → 19.73 | +0.00 | 0.8137 → 0.8137 | +0.0000 |
 | low-resolution | 83 | 19.10 → 19.10 | +0.00 | 0.8229 → 0.8229 | +0.0000 |
 
-三个阴影样本均改善。噪声样本的 PSNR 有退化，SSIM 有小幅改善。模糊和低分辨率样本无提升；当前去阴影算法未实现去模糊和超分恢复。样本为固定页面样式的合成基线，实拍的可读性仍依赖人工复核。
+三个阴影样本均改善。噪声样本的 PSNR 有退化，SSIM 有小幅改善。模糊和低分辨率样本无提升；默认去阴影算法未实现去模糊和超分恢复。样本为固定页面样式的合成基线，实拍的可读性仍依赖人工复核。
+
+可选的频域/复原增强默认关闭，使用 `M1_ENHANCEMENTS=1` 才会加入 `periodic`、`motion-blur`、`defocus-blur` 三类退化。2026-11-22 在桌面 Chromium 上用 512×640 合成样本测得：
+
+| 退化 | 处理 | Δ PSNR | Δ SSIM | 备注 |
+|---|---|---:|---:|---|
+| periodic（0.08/0.03 cycles/px，振幅 22） | C04 全图陷波 | +9.70 dB | +0.383 | 三个种子一致 |
+| motion-blur（水平 9 px 平均） | C05 全图 Wiener | +1.45 dB | +0.035 | PSF 估计 9.0 px / 0° |
+| defocus-blur（文字样例） | C05 | 0 | 0 | PSF 置信度不足，按设计跳过 |
+
+离焦在带大块边缘的合成图上可估计出 3–4 px 半径并复原；文字过密的样本会跳过。C05 的增益明显小于课程实验中的全变分去卷积，这是单线程 WASM 下不引入高迭代复原的已知取舍。
 
 ## 复跑
 
@@ -71,6 +81,8 @@ curl -fL -o .cache/m0/frames.tar.gz https://github.com/jchazalon/smartdoc15-ch1-
 python3 scripts/extract-m0-smartdoc.py .cache/m0/frames.tar.gz .cache/m0/smartdoc
 bun run build:worker
 node scripts/evaluate-m0-quality.mjs .cache/m0/smartdoc .cache/m0/quality
+# 加入可选频域/复原增强样本
+M1_ENHANCEMENTS=1 node scripts/evaluate-m0-quality.mjs .cache/m0/smartdoc .cache/m0/quality
 ```
 
 帧归档 SHA-256 为 `3acb8be143fc86c507d90d298097cba762e91a3abf7e2d35ccd5303e13a79eae`。评估输出 `quality.json`（各帧真值、检测值、合成数据指标）和 `review.html`（真值叠图及扫描预览）。

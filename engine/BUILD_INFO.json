@@ -22,10 +22,10 @@
       "sha256": "6ff26ba3ac97dd625a9dbbdd55d12e8b742759649e963f8d92793a86a57b9ee4"
     },
     "public/wasm/opencv.wasm": {
-      "bytes": 3019344,
-      "sha256": "01c322f40f6700b5e6d8f55faf8b37b4d2070c77e3f2d701e21ee1f68ae802f3"
+      "bytes": 3019736,
+      "sha256": "dcc07f0bca9a504ed25aeb181db87bd7ea22c74720ada66ba524eb393960e035"
     }
   },
-  "configSha256": "2fe66955874071eb2c91fb89a43fbc64b1be98f6ce19a08c2e1081867c3c40b9",
+  "configSha256": "f2416ebd3e83256cd430823a41677ccc117800ef1ef615d41b64bb13ed2a5d31",
   "sourcePatchSha256": "eb5a4a0ffcd243a8ef660d17137a59665708218dddac8509865c602ad3da38ee"
 }
