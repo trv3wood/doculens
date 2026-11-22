@@ -76,8 +76,8 @@ function detectTilePeaks(cv: CvModule, scan: CvMat, tile: Tile): TilePeaks {
   const size = tile.width;
   const window = hann2d(size, size);
   const n = optimalSize(cv, size);
-  const spectrum = createComplex(cv, n, n);
   const magnitude = new Float32Array(n * n);
+  const spectrum = createComplex(cv, n, n);
   try {
     const { cols: width } = scan;
     // 大分配可能让 WASM 堆增长，必须在分配之后重新取视图。
@@ -372,54 +372,67 @@ export function runSpectral(cv: CvModule, scan: CvMat, requested: boolean): Spec
   if (!hasDft(cv)) {
     return { ...base, reason: "error", ms: performance.now() - started };
   }
-  const collected = collectPeaks(cv, scan);
-  const gray = scan.data;
-  const candidateCount = collected.candidateCount;
-  if (candidateCount > MAX_CANDIDATES) {
-    return { ...base, reason: "too-many-peaks", detail: collected.detail, ms: performance.now() - started };
-  }
-  if (!collected.peaks.length) {
-    return { ...base, reason: "no-peaks", detail: collected.detail, ms: performance.now() - started };
-  }
-  // 文字行也会形成周期峰，但不会出现在空白区域；只保留在低方差块中仍可见的分量。
-  const block = chooseBackgroundBlock(gray, width, height);
-  const amplitudes = collected.peaks.map((peak) => backgroundAmplitude(gray, width, block, peak));
-  const peaks = collected.peaks.filter((_, index) => amplitudes[index] >= 1.2);
-  const amplitudeDetail = `${collected.detail} bg=[${amplitudes.map((value) => value.toFixed(1)).join(",")}] bgStd=${block.std.toFixed(1)}`;
-  if (!peaks.length || block.std > 35) {
-    return { ...base, reason: "no-peaks", detail: amplitudeDetail, ms: performance.now() - started };
-  }
-  const detail = amplitudeDetail;
-  const confidence = peaks.reduce((sum, peak) => sum + peak.confidence, 0) / peaks.length;
-  const frequencies = peaks.map(({ fx, fy, strength }) => ({ fx, fy, strength }));
-  const snapshot = gray.slice();
-  let mode: SpectralDiagnostics["mode"] = "full";
-  let sigma = 0;
-  if (width * height > FULL_DFT_LIMIT) {
-    mode = "sine";
-    subtractSinusoids(gray, width, height, peaks);
-  } else {
-    const padWidth = optimalSize(cv, width);
-    const padHeight = optimalSize(cv, height);
-    sigma = Math.max(2, Math.min(24, Math.round(0.002 * Math.max(padWidth, padHeight))));
-    const spectrum = createComplex(cv, padHeight, padWidth);
-    try {
-      // 分配全图复数谱后重新取扫描图视图。
-      fillComplexFromGray(cv, spectrum, scan.data, width, height);
-      forward(cv, spectrum);
-      applyNotch(spectrum, peaks, sigma);
-      inverse(cv, spectrum);
-      writeGrayFromComplex(spectrum, scan.data, width, height);
-    } finally {
-      spectrum.delete();
+  let snapshot: Uint8Array | undefined;
+  try {
+    const collected = collectPeaks(cv, scan);
+    const gray = scan.data;
+    const candidateCount = collected.candidateCount;
+    if (candidateCount > MAX_CANDIDATES) {
+      return { ...base, reason: "too-many-peaks", detail: collected.detail, ms: performance.now() - started };
     }
-  }
-  if (edgePreservation(snapshot, scan.data, width, height) < 0.85) {
-    scan.data.set(snapshot);
+    if (!collected.peaks.length) {
+      return { ...base, reason: "no-peaks", detail: collected.detail, ms: performance.now() - started };
+    }
+    // 文字行也会形成周期峰，但不会出现在空白区域；只保留在低方差块中仍可见的分量。
+    const block = chooseBackgroundBlock(gray, width, height);
+    const amplitudes = collected.peaks.map((peak) => backgroundAmplitude(gray, width, block, peak));
+    const peaks = collected.peaks.filter((_, index) => amplitudes[index] >= 1.2);
+    const amplitudeDetail = `${collected.detail} bg=[${amplitudes.map((value) => value.toFixed(1)).join(",")}] bgStd=${block.std.toFixed(1)}`;
+    if (!peaks.length || block.std > 35) {
+      return { ...base, reason: "no-peaks", detail: amplitudeDetail, ms: performance.now() - started };
+    }
+    const detail = amplitudeDetail;
+    const confidence = peaks.reduce((sum, peak) => sum + peak.confidence, 0) / peaks.length;
+    const frequencies = peaks.map(({ fx, fy, strength }) => ({ fx, fy, strength }));
+    snapshot = gray.slice();
+    let mode: SpectralDiagnostics["mode"] = "full";
+    let sigma = 0;
+    if (width * height > FULL_DFT_LIMIT) {
+      mode = "sine";
+      subtractSinusoids(gray, width, height, peaks);
+    } else {
+      const padWidth = optimalSize(cv, width);
+      const padHeight = optimalSize(cv, height);
+      sigma = Math.max(2, Math.min(24, Math.round(0.002 * Math.max(padWidth, padHeight))));
+      const spectrum = createComplex(cv, padHeight, padWidth);
+      try {
+        // 分配全图复数谱后重新取扫描图视图。
+        fillComplexFromGray(cv, spectrum, scan.data, width, height);
+        forward(cv, spectrum);
+        applyNotch(spectrum, peaks, sigma);
+        inverse(cv, spectrum);
+        writeGrayFromComplex(spectrum, scan.data, width, height);
+      } finally {
+        spectrum.delete();
+      }
+    }
+    if (edgePreservation(snapshot, scan.data, width, height) < 0.85) {
+      scan.data.set(snapshot);
+      return {
+        applied: false,
+        reason: "guard",
+        mode: "none",
+        peakPairs: peaks.length,
+        confidence,
+        sigmaPx: sigma,
+        frequencies,
+        detail,
+        ms: performance.now() - started,
+      };
+    }
     return {
-      applied: false,
-      reason: "guard",
-      mode: "none",
+      applied: true,
+      mode,
       peakPairs: peaks.length,
       confidence,
       sigmaPx: sigma,
@@ -427,15 +440,11 @@ export function runSpectral(cv: CvModule, scan: CvMat, requested: boolean): Spec
       detail,
       ms: performance.now() - started,
     };
+  } catch (error) {
+    const detail = String(error);
+    if (!/out of memory|insufficient memory|failed to allocate|array buffer allocation failed|invalid typed array length/i.test(detail)) throw error;
+    // 大图正弦扣除可能已修改部分像素，回退后继续扫描。
+    if (snapshot) scan.data.set(snapshot);
+    return { ...base, reason: "memory", detail, ms: performance.now() - started };
   }
-  return {
-    applied: true,
-    mode,
-    peakPairs: peaks.length,
-    confidence,
-    sigmaPx: sigma,
-    frequencies,
-    detail,
-    ms: performance.now() - started,
-  };
 }

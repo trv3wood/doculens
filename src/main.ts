@@ -384,6 +384,8 @@ modeSelect.addEventListener("change", () => {
 });
 
 function scheduleEnhancementScan() {
+  invalidateResult();
+  updateButtons();
   if (enhanceTimer !== null) clearTimeout(enhanceTimer);
   enhanceTimer = window.setTimeout(() => {
     enhanceTimer = null;
@@ -395,9 +397,8 @@ for (const toggle of [moireToggle, deblurToggle]) {
   toggle.addEventListener("change", () => {
     moireEnabled = moireToggle.checked;
     deblurEnabled = deblurToggle.checked;
-    invalidateResult();
-    updateButtons();
     if (previewReady) scheduleEnhancementScan();
+    else updateButtons();
   });
 }
 blurTypeSelect.addEventListener("change", () => {

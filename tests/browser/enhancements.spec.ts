@@ -190,3 +190,15 @@ test("黑白模式应用增强后仍为纯二值输出", async ({ page }) => {
   });
   expect(values).toEqual([0, 255]);
 });
+
+test("切换模糊类型后立即禁用旧导出，重扫后恢复", async ({ page }) => {
+  await scan(page, resolve("testdata/generated/document-640x480.png"), { deblur: true });
+  await page.clock.install();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  await page.selectOption("#blur-type", "motion");
+  await expect(page.locator("#save")).toBeDisabled();
+  await expect(page.locator("#output")).toBeHidden();
+  await page.clock.runFor(250);
+  await page.clock.resume();
+  await expect(page.locator("#save")).toBeEnabled();
+});
