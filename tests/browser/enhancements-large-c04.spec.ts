@@ -34,6 +34,7 @@ test("12MP C04 全图陷波计时", async ({ page }) => {
     mimeType: "image/png",
     buffer: Buffer.from(base64, "base64"),
   });
+  await page.click("#enhancement-options");
   await page.check("#moire");
   await page.click("#process");
   await expect(page.locator("#save")).toBeEnabled({ timeout: 180_000 });

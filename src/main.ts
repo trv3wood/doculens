@@ -1,3 +1,4 @@
+import type { MiniAppTheme } from "@discourse-mini-app/sdk";
 import { getErrorCode, Platform } from "./host";
 import { ScannerClient } from "./workers/client";
 import { createScanExports, exportName, type ExportFormat } from "./export";
@@ -32,7 +33,7 @@ const formatSelect = element<HTMLSelectElement>("format");
 const status = element<HTMLParagraphElement>("status");
 const logView = element<HTMLPreElement>("log");
 const inputCanvas = element<HTMLCanvasElement>("input");
-const modeSelect = element<HTMLSelectElement>("mode");
+const modeField = element<HTMLFieldSetElement>("mode");
 const moireToggle = element<HTMLInputElement>("moire");
 const deblurToggle = element<HTMLInputElement>("deblur");
 const blurTypeSelect = element<HTMLSelectElement>("blur-type");
@@ -66,6 +67,12 @@ let blurType: BlurType = "auto";
 let engineSupportsDft = false;
 let enhanceTimer: number | null = null;
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
+}
+
 function invalidateResult() {
   exportGeneration++;
   exportBlob = null;
@@ -86,7 +93,7 @@ function drawCrop() {
     else context.lineTo(x * width, y * height);
   });
   context.closePath();
-  context.strokeStyle = "#14614e";
+  context.strokeStyle = getComputedStyle(cropOutline).getPropertyValue("--accent").trim();
   context.lineWidth = 3;
   context.stroke();
 }
@@ -188,7 +195,7 @@ function updateButtons() {
   processButton.textContent = busy ? "正在处理…" : previewReady ? "更新扫描件" : "生成扫描件";
   fileInput.disabled = busy;
   formatSelect.disabled = busy;
-  modeSelect.disabled = busy;
+  modeField.disabled = busy;
   const enhanceDisabled = busy || !client || !engineSupportsDft;
   moireToggle.disabled = enhanceDisabled;
   deblurToggle.disabled = enhanceDisabled;
@@ -278,7 +285,7 @@ fileInput.addEventListener("change", () => {
   inputCanvas.width = inputCanvas.height = outputCanvas.width = outputCanvas.height = 1;
   drawCrop();
   fileInfo.textContent = selectedFile
-    ? `${selectedFile.name} · ${(selectedFile.size / 1024 / 1024).toFixed(2)} MiB`
+    ? `${selectedFile.name} · ${formatBytes(selectedFile.size)}`
     : "JPEG、PNG 或 WebP";
   if (engineState === "ready") setStatus(selectedFile ? "点击「生成扫描件」开始处理。" : "");
   updateButtons();
@@ -328,7 +335,7 @@ async function scan() {
       rgba: image.data.buffer,
       corners,
       turns,
-      mode: modeSelect.value as ScanMode,
+      mode: modeField.querySelector<HTMLInputElement>("input:checked")!.value as ScanMode,
       moire: moireEnabled,
       deblur: deblurEnabled,
       blurType: deblurEnabled ? blurType : undefined,
@@ -379,7 +386,7 @@ resetCropButton.addEventListener("click", () => {
   corners = fullFrame;
   void scan();
 });
-modeSelect.addEventListener("change", () => {
+modeField.addEventListener("change", () => {
   if (previewReady) void scan();
 });
 
@@ -435,6 +442,31 @@ shareButton.addEventListener("click", () => {
     });
 });
 
+function applyTheme(theme: MiniAppTheme) {
+  const { dataset, style } = document.documentElement;
+  dataset.mode = theme.mode;
+  dataset.motion = theme.reducedMotion ? "reduced" : "full";
+  style.setProperty("--bg", theme.background);
+  style.setProperty("--fg", theme.text);
+  style.setProperty("--accent", theme.accent);
+  style.setProperty("--border", theme.border);
+
+  // 用实际强调色的亮度选择对比度更高的按钮文字。
+  const pixel = document.createElement("canvas");
+  pixel.width = pixel.height = 1;
+  const context = pixel.getContext("2d")!;
+  context.fillStyle = theme.accent;
+  context.fillRect(0, 0, 1, 1);
+  const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+  const linear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  style.setProperty("--on-accent", luminance > Math.sqrt(0.0525) - 0.05 ? "#000" : "#fff");
+  if (previewReady) drawCrop();
+}
+
 async function start() {
   moireEnabled = moireToggle.checked;
   deblurEnabled = deblurToggle.checked;
@@ -442,10 +474,7 @@ async function start() {
   updateButtons();
   log(`计时 首屏可选图：${(performance.now() - appStarted).toFixed(1)}ms`);
   try {
-    await platform.connect((theme) => {
-      document.documentElement.dataset.mode = theme.mode;
-      document.documentElement.dataset.motion = theme.reducedMotion ? "reduced" : "full";
-    });
+    await platform.connect(applyTheme);
   } catch (error) {
     log(`平台连接失败：${error instanceof Error ? error.message : String(error)}`);
   }

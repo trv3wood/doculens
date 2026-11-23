@@ -1,37 +1,61 @@
 <div id="app">
-  <main class="shell">
-    <header class="app-header">
-      <h1>DocuLens</h1>
-      <p>文档扫描 · 本地处理</p>
-    </header>
+  <header class="app-header">
+    <div class="shell header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <circle cx="10.5" cy="10.5" r="6.5"></circle>
+            <path d="M15.6 15.6 21 21"></path>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <h1>DocuLens</h1>
+          <span class="brand-sub">扫描 · 裁切 · 导出</span>
+        </div>
+      </div>
+      <span class="header-note">本地处理</span>
+    </div>
+  </header>
 
+  <main class="shell">
     <section class="panel source" aria-label="导入照片">
       <div class="file-control">
         <input id="file" class="file-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="选择照片" aria-describedby="file-info" />
-        <label class="button file-label" for="file">选择照片</label>
+        <label class="button file-label" for="file">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+            <circle cx="8.5" cy="9.5" r="1.5"></circle>
+            <path d="m21 15-5-5L5 21"></path>
+          </svg>
+          选择照片
+        </label>
         <p id="file-info" class="muted">JPEG、PNG 或 WebP</p>
       </div>
       <div class="primary-actions">
-        <label class="field" for="mode">扫描效果
-          <select id="mode">
-            <option value="enhanced">去阴影</option>
-            <option value="gray">灰度</option>
-            <option value="binary">黑白</option>
-          </select>
-        </label>
+        <fieldset id="mode" class="scan-modes">
+          <legend>扫描效果</legend>
+          <div class="mode-options">
+            <label><input type="radio" name="mode" value="enhanced" checked /> <span>去阴影</span></label>
+            <label><input type="radio" name="mode" value="gray" /> <span>灰度</span></label>
+            <label><input type="radio" name="mode" value="binary" /> <span>黑白</span></label>
+          </div>
+        </fieldset>
         <button id="process" class="primary" type="button" disabled>生成扫描件</button>
       </div>
-      <div class="enhancements">
-        <label class="check"><input id="moire" type="checkbox" /> 周期噪声/摩尔纹</label>
-        <label class="check"><input id="deblur" type="checkbox" /> 模糊复原</label>
-        <label class="field" for="blur-type" id="blur-type-field" hidden>模糊类型
-          <select id="blur-type">
-            <option value="auto">自动</option>
-            <option value="motion">运动</option>
-            <option value="defocus">失焦</option>
-          </select>
-        </label>
-      </div>
+      <details class="advanced">
+        <summary id="enhancement-options">高级增强</summary>
+        <div class="enhancements">
+          <label class="check"><input id="moire" type="checkbox" /> 去摩尔纹</label>
+          <label class="check"><input id="deblur" type="checkbox" /> 模糊复原</label>
+          <label class="field" for="blur-type" id="blur-type-field" hidden>模糊类型
+            <select id="blur-type">
+              <option value="auto">自动</option>
+              <option value="motion">运动</option>
+              <option value="defocus">失焦</option>
+            </select>
+          </label>
+        </div>
+      </details>
     </section>
 
     <div class="feedback">
@@ -73,8 +97,22 @@
               <option value="pdf">单页 PDF</option>
             </select>
           </label>
-          <button id="save" class="primary" type="button" disabled>保存扫描件</button>
-          <button id="share" type="button" disabled hidden>分享</button>
+          <button id="save" class="primary" type="button" disabled>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v11"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M5 21h14"></path>
+            </svg>
+            保存扫描件
+          </button>
+          <button id="share" type="button" disabled hidden>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"></path>
+              <path d="M16 6l-4-4-4 4"></path>
+              <path d="M12 2v14"></path>
+            </svg>
+            分享
+          </button>
         </div>
       </figure>
     </section>

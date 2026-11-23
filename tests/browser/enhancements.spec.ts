@@ -94,7 +94,8 @@ async function scan(
     ? { name: input.split("/").pop()!, mimeType: "image/png", buffer: await readFile(input) }
     : { name: input.name ?? "synthetic.png", mimeType: "image/png", buffer: input.buffer };
   await page.setInputFiles("#file", file);
-  if (options.mode) await page.selectOption("#mode", options.mode);
+  if (options.mode) await page.check(`#mode input[value="${options.mode}"]`);
+  if (options.moire || options.deblur) await page.click("#enhancement-options");
   if (options.moire) await page.check("#moire");
   if (options.deblur) {
     await page.check("#deblur");
@@ -154,6 +155,7 @@ test("增强开关跨文件保留、页面重载恢复默认关闭", async ({ pa
   await page.goto("/");
   await expect(page.locator("#moire")).not.toBeChecked();
   await expect(page.locator("#deblur")).not.toBeChecked();
+  await page.click("#enhancement-options");
   await page.check("#moire");
   await page.setInputFiles("#file", resolve("testdata/generated/document-640x480.png"));
   await expect(page.locator("#moire")).toBeChecked();

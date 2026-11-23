@@ -31,6 +31,7 @@ test("12.8MP 运动模糊走 FIR 降级并保持全分辨率", async ({ page }) 
     mimeType: "image/png",
     buffer: Buffer.from(base64, "base64"),
   });
+  await page.click("#enhancement-options");
   await page.check("#deblur");
   await page.selectOption("#blur-type", "motion");
   await page.click("#process");

@@ -138,7 +138,7 @@ test("斜拍纸张自动扶正、四角调整及旋转导出", async ({ page }) 
   const pdf = await PDFDocument.load(await downloadExport(page, "pdf"));
   const pageSize = pdf.getPage(0).getSize();
   expect(pageSize.width / pageSize.height).toBeCloseTo(adjustedHeight / adjustedWidth, 8);
-  await page.selectOption("#mode", "binary");
+  await page.getByRole("radio", { name: "黑白" }).check();
   await expect(page.locator("#save")).toBeEnabled();
   const binary = await scan.evaluate((canvas: HTMLCanvasElement) => {
     const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -247,4 +247,38 @@ test("切换格式复用编码任务，旋转后按新结果导出", async ({ pa
   const { width, height } = rotated.getPage(0).getSize();
   expect(width / height).toBeCloseTo(480 / 640, 8);
   expect(await encodedFormats()).toEqual(["image/jpeg", "image/png", "image/png"]);
+});
+
+test("跟随宿主主题切换背景、文字、边框与主按钮", async ({ page }) => {
+  await page.addInitScript(() => {
+    const light = { mode: "light", background: "#fafafa", text: "#202020", border: "#ddd", accent: "#0055aa" };
+    const dark = { mode: "dark", background: "#181818", text: "#eee", border: "#555", accent: "#ffee88" };
+    Object.defineProperty(window, "miniApp", { value: {
+      ready: Promise.resolve(),
+      permissions: { has: () => true },
+      lifecycle: { ready: () => {} },
+      theme: {
+        get: () => light,
+        onChange: (callback: (theme: typeof dark) => void) => {
+          document.addEventListener("switch-theme", () => callback(dark));
+          return () => {};
+        },
+      },
+      assets: { async readBytes(path: string) {
+        return new Uint8Array(await (await fetch(`/${path}`)).arrayBuffer());
+      } },
+      workers: { create: (path: string) => new Worker(`/${path}`) },
+    } });
+  });
+  await page.goto("/");
+  const process = page.locator("#process");
+  await expect(process).toHaveCSS("background-color", "rgb(0, 85, 170)");
+  await expect(process).toHaveCSS("color", "rgb(255, 255, 255)");
+  await page.evaluate(() => document.dispatchEvent(new Event("switch-theme")));
+  await expect(page.locator("html")).toHaveAttribute("data-mode", "dark");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(24, 24, 24)");
+  await expect(page.locator("body")).toHaveCSS("color", "rgb(238, 238, 238)");
+  await expect(page.locator(".source")).toHaveCSS("border-top-color", "rgb(85, 85, 85)");
+  await expect(process).toHaveCSS("background-color", "rgb(255, 238, 136)");
+  await expect(process).toHaveCSS("color", "rgb(0, 0, 0)");
 });
