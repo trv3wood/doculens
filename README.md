@@ -36,7 +36,7 @@ DocuLens 是一款面向 Linux.do MApp 的轻量级文档扫描工具。无需�
 
 ## 开发与状态
 
-[1.0.3](https://github.com/trv3wood/doculens/releases/tag/v1.0.3) 已由用户在 MApp 真机试用。开发版已通过 MApp 真机核心回归，覆盖后台初始化、12MP 扫描、JPEG/PNG/PDF 保存和导出缓存。测试环境与待测项见 [MApp 检查清单](./docs/m0-mapp-checklist.md)。
+当前开发版本为 0.3.0，尚未在 MApp 正式发布。此前文档中的 1.0.x 编号仅用于沙箱和 [GitHub 存档](https://github.com/trv3wood/doculens/releases/tag/v1.0.3)，真实沙箱 URL 保留原编号。开发版已通过 MApp 真机核心回归，覆盖后台初始化、12MP 扫描、JPEG/PNG/PDF 保存和导出缓存。测试环境与待测项见 [MApp 检查清单](./docs/m0-mapp-checklist.md)。
 
 效果评价使用带参考真值的 PSNR、SSIM，不做 OCR/CER。真机验收环境为 iPhone 15 Pro Max / iOS 27.2 的 MApp；独立移动浏览器只用于开发诊断。
 
