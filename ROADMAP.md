@@ -17,11 +17,11 @@
 - [扫描质量基线](./docs/m0-quality.md)覆盖 24 个独立实拍文档和 12 个合成退化样本。
 - [真机性能基线](./docs/m0-performance.md)已完成 12MP JPEG 的 10 轮真机测量，0 次失败，并归档逐次数据。
 
-## 下一步 · M1 并行实施
+## M1 实施
 
-- [自动找边](./docs/m1-detection-plan.md) · `codex/m1-detection`，负责 Worker 与质量评估。
-- [iOS 风格界面](./docs/m1-ios-ui-plan.md) · `codex/m1-ios-ui`，负责组件选型、界面和交互回归。
-- 两条分支从 M0 验收提交 `0c47721` 开始。桌面开发可并行，基准 iPhone 串行使用。先合算法，再合 UI，随后用同一候选包完成集成真机回归。
+- [自动找边](./docs/m1-detection-plan.md)与扫描增强已合入主线。
+- [Discourse 风格界面](./docs/m1-discourse-ui-plan.md)从当前主线开展，界面跟随 LINUX DO 当前主题。
+- UI 集成后，用同一候选包完成算法与界面的真机回归。
 - 开发快速采样用 5 轮，记录 P50、最慢一轮和失败次数。M1 正式验收按 [SPEC](./SPEC.md) 保持至少 10 轮，并报告 P50、P95、失败率和内存估算。脚本的 5 轮模式列为后续实现。
 
 ## 后续 · M1 单页产品与质量验收
