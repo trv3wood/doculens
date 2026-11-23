@@ -1,6 +1,7 @@
 import type { MiniAppManifest } from "@discourse-mini-app/sdk/pack";
 import { pack } from "@discourse-mini-app/sdk/pack";
-import { copyFile, readFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { productionTemplate } from "./production-template.ts";
 
 /**
  * 打包成 app.zip。
@@ -33,7 +34,8 @@ if (
   );
 }
 
-await copyFile("src/template.html", "dist/web/index.html");
+const template = await readFile("src/template.html", "utf8");
+await writeFile("dist/web/index.html", productionTemplate(template));
 await copyFile("src/strings.json", "dist/web/strings.json");
 
 const files: Record<string, Buffer> = {};

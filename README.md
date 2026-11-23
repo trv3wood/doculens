@@ -50,7 +50,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-开发服务器位于 `http://127.0.0.1:5191`。
+开发服务器位于 `http://127.0.0.1:5191`，并显示「诊断日志」控件。`bun run build` 生成的正式包会移除该控件，只保留状态栏反馈。
 
 ```sh
 bun run typecheck

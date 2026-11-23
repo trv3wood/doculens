@@ -31,7 +31,7 @@ const fileInput = element<HTMLInputElement>("file");
 const fileInfo = element<HTMLParagraphElement>("file-info");
 const formatSelect = element<HTMLSelectElement>("format");
 const status = element<HTMLParagraphElement>("status");
-const logView = element<HTMLPreElement>("log");
+const logView = document.getElementById("log") as HTMLPreElement | null;
 const inputCanvas = element<HTMLCanvasElement>("input");
 const modeField = element<HTMLFieldSetElement>("mode");
 const moireToggle = element<HTMLInputElement>("moire");
@@ -133,6 +133,8 @@ handles.forEach((handle, index) => {
 });
 
 function log(message: string) {
+  // 打包版本会移除诊断日志控件，此时只保留状态栏反馈。
+  if (!logView) return;
   const time = new Date().toLocaleTimeString();
   logView.textContent += `[${time}] ${message}\n`;
   logView.scrollTop = logView.scrollHeight;
