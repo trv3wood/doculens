@@ -17,6 +17,7 @@
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "vite.config.ts",
+    "vite.desktop.config.ts",
     "vite.worker.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"

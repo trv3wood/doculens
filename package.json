@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun run build:worker && bun --bun vite",
+    "dev:desktop": "bun run build:desktop && electron desktop/main.cjs",
+    "build:desktop": "bun run typecheck && bun run build:worker && bun --bun vite build --config vite.desktop.config.ts",
+    "package:windows": "bash scripts/package-windows.sh",
     "build": "bun run typecheck && bun run validate && bun run build:worker && bun --bun vite build && bun run scripts/package.ts && bun run verify",
     "build:debug": "MINI_APP_DEBUG=1 bun run build",
     "build:worker": "bun --bun vite build --config vite.worker.config.ts && bun run scripts/assemble-worker.ts",
@@ -25,6 +28,8 @@
     "@playwright/test": "1.58.2",
     "@types/bun": "1.4.3",
     "@types/node": "24.10.0",
+    "electron": "45.5.0",
+    "electron-builder": "26.18.1",
     "typescript": "5.9.3",
     "vite": "8.3.5",
     "vitest": "4.0.18"

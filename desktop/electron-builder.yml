@@ -1,0 +1,13 @@
+appId: app.doculens.desktop
+productName: DocuLens
+directories:
+  output: dist/windows
+extraMetadata:
+  main: desktop/main.cjs
+files:
+  - desktop/main.cjs
+  - dist/desktop/**/*
+  - '!node_modules/**'
+win:
+  target: zip
+  artifactName: ${productName}-${version}-windows-${arch}.${ext}

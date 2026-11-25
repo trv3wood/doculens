@@ -74,6 +74,19 @@ DOCULENS_BUILD_JOBS=6 bash engine/build.sh
 
 真实 MApp 验收步骤见 [M0 硬门禁清单](./docs/m0-mapp-checklist.md)。桌面测试通过不等于真实 MApp 通过。
 
+## Windows 便携版
+
+在 Ubuntu x64 上安装 Bun、Node.js 22.12+ 和 Podman，然后运行：
+
+```sh
+bun install --frozen-lockfile
+bun run package:windows
+```
+
+脚本先构建桌面前端，再通过 Podman 的 Wine 镜像交叉打包。首次构建需要联网下载镜像及 Electron。产物位于 `dist/windows/DocuLens-<版本>-windows-x64.zip`。在 Windows 上解压整个 ZIP 后，双击 `DocuLens.exe` 即可离线处理图片。
+
+在 Ubuntu 本地调试桌面窗口时，先运行 `bun run install-electron` 安装 Linux Electron，再运行 `bun run dev:desktop`。
+
 ## 隐私
 
 DocuLens 不提供服务端图像处理。用户文档的解码、编辑和导出均在本地进行。
